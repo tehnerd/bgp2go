@@ -78,3 +78,13 @@ func TestEncodeOpenMsg(t *testing.T) {
 		}
 	}
 }
+
+func TestDecodeUpdateMsg(t *testing.T) {
+	encodedUpdate, _ := hex.DecodeString(hexUpdate1)
+	updateMsg, err := DecodeUpdateMsg(encodedUpdate[19:])
+	if err != nil {
+		fmt.Println(err)
+		t.Errorf("error during update  msg decoding")
+	}
+	fmt.Println(updateMsg)
+}

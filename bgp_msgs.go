@@ -7,8 +7,20 @@ import (
 )
 
 const (
-	MAX_MSG_SIZE = 4096
-	MSG_HDR_SIZE = 19
+
+	//Misc const
+	MAX_MSG_SIZE     = 4096
+	MSG_HDR_SIZE     = 19
+	TWO_OCTET_SHIFT  = 2
+	FOUR_OCTET_SHIFT = 4
+	ONE_OCTET_SHIFT  = 1
+
+	// BGP's msg's types
+	BGP_OPEN_MSG         = 1
+	BGP_UPDATE_MSG       = 2
+	BGP_NOTIFICATION_MSG = 3
+	BGP_KEEPALIVE_MSG    = 4
+	BGP_ROUTEREFRESH_MSG = 5
 )
 
 /*
@@ -33,6 +45,27 @@ type OpenMsg struct {
 type OptionalParamHeader struct {
 	ParamType   uint8
 	ParamLength uint8
+}
+
+//TODO: add optional capabilities structs; such as 32bit asn; rr etc
+
+type UpdateMsgLengths struct {
+	WithdrawRoutesLength uint16
+	//WithdrawRoutes variable
+	TotalPathAttrsLength uint16
+	//Path attrs variable
+	//NLRI variable
+}
+
+type Route struct {
+	PrefixLength uint8
+	//Prefix variable
+}
+
+type PathAttrsHdr struct {
+	AttrFlags  uint8
+	AttrType   uint8
+	AttrLength uint16
 }
 
 func DecodeMsgHeader(msg []byte) (MsgHeader, error) {
@@ -96,4 +129,19 @@ func EncodeOptionalParamHeader(optParamHdr *OptionalParamHeader) ([]byte, error)
 		return nil, errors.New("cant encode optional param header")
 	}
 	return buf.Bytes(), nil
+}
+
+//will incremently add features; update msg, compare to other ones, has lots of variable length fields
+func DecodeUpdateMsg(msg []byte) (UpdateMsgLengths, error) {
+	var updMsgLen = UpdateMsgLengths{}
+	err := binary.Read(bytes.NewReader(msg), binary.BigEndian, &(updMsgLen.WithdrawRoutesLength))
+	if err != nil {
+		return updMsgLen, errors.New("cant decode update msg")
+	}
+	msg = msg[TWO_OCTET_SHIFT+updMsgLen.WithdrawRoutesLength:]
+	err = binary.Read(bytes.NewReader(msg), binary.BigEndian, &(updMsgLen.TotalPathAttrsLength))
+	if err != nil {
+		return updMsgLen, errors.New("cant decode update msg")
+	}
+	return updMsgLen, nil
 }
