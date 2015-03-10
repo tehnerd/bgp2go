@@ -4,16 +4,18 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 )
 
 const (
 
 	//Misc const
-	MAX_MSG_SIZE     = 4096
-	MSG_HDR_SIZE     = 19
-	TWO_OCTET_SHIFT  = 2
-	FOUR_OCTET_SHIFT = 4
-	ONE_OCTET_SHIFT  = 1
+	MAX_MSG_SIZE      = 4096
+	MSG_HDR_SIZE      = 19
+	ONE_OCTET_SHIFT   = 1
+	TWO_OCTET_SHIFT   = 2
+	THREE_OCTET_SHIFT = 3
+	FOUR_OCTET_SHIFT  = 4
 
 	// BGP's msg's types
 	BGP_OPEN_MSG         = 1
@@ -60,12 +62,6 @@ type UpdateMsgLengths struct {
 type Route struct {
 	PrefixLength uint8
 	//Prefix variable
-}
-
-type PathAttrsHdr struct {
-	AttrFlags  uint8
-	AttrType   uint8
-	AttrLength uint16
 }
 
 func DecodeMsgHeader(msg []byte) (MsgHeader, error) {
@@ -133,7 +129,7 @@ func EncodeOptionalParamHeader(optParamHdr *OptionalParamHeader) ([]byte, error)
 
 //will incremently add features; update msg, compare to other ones, has lots of variable length fields
 func DecodeUpdateMsg(msg []byte) (UpdateMsgLengths, error) {
-	var updMsgLen = UpdateMsgLengths{}
+	updMsgLen := UpdateMsgLengths{}
 	err := binary.Read(bytes.NewReader(msg), binary.BigEndian, &(updMsgLen.WithdrawRoutesLength))
 	if err != nil {
 		return updMsgLen, errors.New("cant decode update msg")
@@ -142,6 +138,21 @@ func DecodeUpdateMsg(msg []byte) (UpdateMsgLengths, error) {
 	err = binary.Read(bytes.NewReader(msg), binary.BigEndian, &(updMsgLen.TotalPathAttrsLength))
 	if err != nil {
 		return updMsgLen, errors.New("cant decode update msg")
+	}
+	pathAttr := PathAttrHdr{}
+	offset := MSG_HDR_SIZE + updMsgLen.WithdrawRoutesLength + 2*TWO_OCTET_SHIFT
+	attrsEndOffset := offset + updMsgLen.TotalPathAttrsLength
+	for offset < attrsEndOffset {
+		err = DecodePathAttrHdr(msg[offset:], &pathAttr)
+		if err != nil {
+			return updMsgLen, errors.New("cant decode update msg")
+		}
+		fmt.Println(pathAttr)
+		if pathAttr.ExtendedLength {
+			offset = offset + THREE_OCTET_SHIFT + pathAttr.AttrLength
+		} else {
+			offset = offset + TWO_OCTET_SHIFT + pathAttr.AttrLength
+		}
 	}
 	return updMsgLen, nil
 }
