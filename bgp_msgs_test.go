@@ -7,9 +7,13 @@ import (
 )
 
 const (
-	hexOpenMsg = "ffffffffffffffffffffffffffffffff003b0104fde8005a0a0000021e02060104000100010202800002020200020440020078020641040000fde8"
-	hexUpdate1 = "ffffffffffffffffffffffffffffffff00360200000015400101004002004003040a0000024005040000006420010101012001010102"
-	hexUpdate2 = "ffffffffffffffffffffffffffffffff00170200000000"
+	hexOpenMsg      = "ffffffffffffffffffffffffffffffff003b0104fde8005a0a0000021e02060104000100010202800002020200020440020078020641040000fde8"
+	hexUpdate1      = "ffffffffffffffffffffffffffffffff00360200000015400101004002004003040a0000024005040000006420010101012001010102"
+	hexUpdate2      = "ffffffffffffffffffffffffffffffff0038020000001c400101004002004003040a00000280040400000078400504000000642001010103"
+	hexUpdate3      = "ffffffffffffffffffffffffffffffff00170200000000"
+	hexUpdate4      = "ffffffffffffffffffffffffffffffff005102000000364001010240021a02060000000100000002000000030000000400000005000000064003040a00000240050400000064c00804ffff000118010b01"
+	hexKA           = "ffffffffffffffffffffffffffffffff001304"
+	hexNotification = "ffffffffffffffffffffffffffffffff0015030607"
 )
 
 func TestDecodeMsgHeader(t *testing.T) {
@@ -81,10 +85,55 @@ func TestEncodeOpenMsg(t *testing.T) {
 
 func TestDecodeUpdateMsg(t *testing.T) {
 	encodedUpdate, _ := hex.DecodeString(hexUpdate1)
-	updateMsg, err := DecodeUpdateMsg(encodedUpdate[19:])
+	bgpRoute, err := DecodeUpdateMsg(encodedUpdate)
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during update  msg decoding")
 	}
-	fmt.Println(updateMsg)
+	PrintBgpUpdate(&bgpRoute)
+	encodedUpdate, _ = hex.DecodeString(hexUpdate2)
+	bgpRoute, err = DecodeUpdateMsg(encodedUpdate)
+	if err != nil {
+		fmt.Println(err)
+		t.Errorf("error during update  msg decoding")
+	}
+	PrintBgpUpdate(&bgpRoute)
+}
+
+/*
+   this test fails right now coz we dont support 32bit asn yet
+   bogus in as_path part; should be 1 2 3 4 5 6
+*/
+
+func TestDecodeUpdMsgWithAsPath(t *testing.T) {
+	encodedUpdate, _ := hex.DecodeString(hexUpdate4)
+	bgpRoute, err := DecodeUpdateMsg(encodedUpdate)
+	if err != nil {
+		fmt.Println(err)
+		t.Errorf("error during update  msg decoding")
+	}
+	PrintBgpUpdate(&bgpRoute)
+
+}
+
+func TestEncodeKeepaliveMsg(t *testing.T) {
+	encodedKA, _ := hex.DecodeString(hexKA)
+	encKA := GenerateKeepalive()
+	for cntr := 19; cntr < len(encKA); cntr++ {
+		if encKA[cntr] != encodedKA[cntr] {
+			t.Errorf("byte of encoded msg is not equal to etalon's msg")
+		}
+	}
+}
+
+func TestDecodeNotificationMsg(t *testing.T) {
+	encodedNotification, _ := hex.DecodeString(hexNotification)
+	notification, err := DecodeNotificationMsg(encodedNotification)
+	if err != nil {
+		t.Errorf("error during notification decoding")
+	}
+	fmt.Println(notification)
+	if notification.ErrorCode != 6 && notification.ErrorSubcode != 7 {
+		t.Errorf("error during notification decoding(code and subcode are not equal to etalon)")
+	}
 }
