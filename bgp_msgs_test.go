@@ -179,4 +179,6 @@ func TestEncodeUpdateMsg1(t *testing.T) {
 	fmt.Println(bgpRoute)
 	fmt.Println("########################")
 	fmt.Println(bgpRoute2)
+	ipv4, _ := DecodeV4NextHop(&bgpRoute2)
+	fmt.Println(Uint32IPv4ToString(ipv4))
 }

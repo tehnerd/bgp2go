@@ -28,7 +28,7 @@ func IPv4ToUint32(ipv4 string) (uint32, error) {
 	return ipv4int, nil
 }
 
-func Uint32Ipv4ToString(ipv4 uint32) string {
+func Uint32IPv4ToString(ipv4 uint32) string {
 	ipv4addr := ""
 	octet := 0
 
@@ -61,7 +61,7 @@ func PrintBgpUpdate(bgpRoute *BGPRoute) {
 	fmt.Printf("Local pref: %v\n", bgpRoute.LOCAL_PREF)
 	fmt.Printf("is Atomic Aggregate: %v\n", bgpRoute.ATOMIC_AGGR)
 	for _, route := range bgpRoute.Routes {
-		fmt.Printf("Route: %v/%v\n", Uint32Ipv4ToString(route.Prefix), route.Length)
+		fmt.Printf("Route: %v/%v\n", Uint32IPv4ToString(route.Prefix), route.Length)
 	}
 
 }

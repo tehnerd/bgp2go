@@ -220,7 +220,8 @@ func AddAttrToRoute(bgpRoute *BGPRoute, pathAttr *PathAttr) error {
 		}
 	case BA_ATOMIC_AGGR:
 		bgpRoute.ATOMIC_AGGR = true
-		err = nil
+	case BA_NEXT_HOP:
+		bgpRoute.NEXT_HOP = append(bgpRoute.NEXT_HOP, pathAttr.Data...)
 	case BA_AS_PATH:
 		if pathAttr.AttrLength != 0 {
 			err = binary.Read(reader, binary.BigEndian, &(bgpRoute.AS_PATH.PSType))
@@ -321,12 +322,22 @@ func (bgpRoute *BGPRoute) AddV4NextHop(ipv4 string) error {
 		return err
 	}
 	buf := new(bytes.Buffer)
-	err = binary.Write(buf, binary.BigEndian, &v4addr)
+	err = binary.Write(buf, binary.LittleEndian, &v4addr)
 	if err != nil {
 		return err
 	}
 	bgpRoute.NEXT_HOP = buf.Bytes()
 	return nil
+}
+
+func DecodeV4NextHop(bgpRoute *BGPRoute) (uint32, error) {
+	reader := bytes.NewReader(bgpRoute.NEXT_HOP)
+	ipv4 := uint32(0)
+	err := binary.Read(reader, binary.BigEndian, &ipv4)
+	if err != nil {
+		return ipv4, fmt.Errorf("cant decove ipv4 next hop: %v\n", err)
+	}
+	return ipv4, nil
 }
 
 //TODO: add withdraw
