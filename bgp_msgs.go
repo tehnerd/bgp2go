@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"math"
 )
 
 const (
@@ -298,8 +297,8 @@ func DecodeUpdateMsg(msg []byte) (BGPRoute, error) {
 			return bgpRoute, fmt.Errorf("cant decode update msg prefix length: %v\n", err)
 		}
 		offset += ONE_OCTET_SHIFT
-		//HACK: for decoding into uint32 to work;  works for ipv4 only; prob gona rewrite for v6/mp-bgp
-		prefixBits := int(math.Floor(float64(prefix.Length) / float64(8)))
+		//awsm trick from BIRD
+		prefixBits := int((prefix.Length + 7) / 8)
 		prefixPart := msg[offset : offset+prefixBits]
 		for cntr := prefixBits; cntr < 4; cntr++ {
 			prefixPart = append(prefixPart, byte(0))
