@@ -58,6 +58,10 @@ const (
 	BGP_UPD_ERROR_OPT_ATTR           = 9
 	BGP_UPD_ERROR_INVALID_NETWORK    = 10
 	BGP_UPD_ERROR_MAILFORMED_AS_PATH = 11
+
+	/* Case errors subcodes */
+	BGP_CASE_ERROR_GENERIC   = 0
+	BGP_CASE_ERROR_COLLISION = 7
 )
 
 /*
@@ -97,7 +101,14 @@ type UpdateMsgLengths struct {
 type NotificationMsg struct {
 	ErrorCode    uint8
 	ErrorSubcode uint8
-	Data         []byte
+	/*
+	   according to 4271 there also could be data field of variable length,
+	   but so far havent seen that anyone actually uses it;
+	   removing it greatly simplifies notification encoding and shouldnt
+	   break anything, coz during notification rcving we must tear down the session anyway
+	   and for that purpose ErrorCode & Subcodes fields should be enought;
+	   data field could be added in future, if there are going to be any demands
+	*/
 }
 
 type IPv4Route struct {
@@ -193,10 +204,20 @@ func AddAttrToRoute(bgpRoute *BGPRoute, pathAttr *PathAttr) error {
 	switch pathAttr.AttrTypeCode {
 	case BA_ORIGIN:
 		err = binary.Read(reader, binary.BigEndian, &(bgpRoute.ORIGIN))
+		if err != nil {
+			return fmt.Errorf("cant decode ORIGIN Attr: %v\n", err)
+		}
 	case BA_MULTI_EXIT_DISC:
 		err = binary.Read(reader, binary.BigEndian, &(bgpRoute.MULTI_EXIT_DISC))
+		if err != nil {
+			return fmt.Errorf("cant decode MED Attr: %v\n", err)
+		}
+
 	case BA_LOCAL_PREF:
 		err = binary.Read(reader, binary.BigEndian, &(bgpRoute.LOCAL_PREF))
+		if err != nil {
+			return fmt.Errorf("cant decode LOCAL_PREF Attr: %v\n", err)
+		}
 	case BA_ATOMIC_AGGR:
 		bgpRoute.ATOMIC_AGGR = true
 		err = nil
@@ -205,25 +226,19 @@ func AddAttrToRoute(bgpRoute *BGPRoute, pathAttr *PathAttr) error {
 			err = binary.Read(reader, binary.BigEndian, &(bgpRoute.AS_PATH.PSType))
 			err = binary.Read(reader, binary.BigEndian, &(bgpRoute.AS_PATH.PSLength))
 			if err != nil {
-				return err
+				return fmt.Errorf("cant decode ASPathLen & Type: %v\n", err)
 			}
 			asn := uint16(0)
 			for cntr := 0; cntr < int(bgpRoute.AS_PATH.PSLength); cntr++ {
 				err = binary.Read(reader, binary.BigEndian, &asn)
 				if err != nil {
-					return err
+					return fmt.Errorf("cant decode ASPathLen ASNS: %v\n", err)
 				}
 				bgpRoute.AS_PATH.PSValue = append(bgpRoute.AS_PATH.PSValue, asn)
 			}
 		} else {
-			err = nil
+			return nil
 		}
-	default:
-		err = nil
-	}
-	if err != nil {
-		fmt.Println(err)
-		return err
 	}
 	return nil
 }
@@ -262,7 +277,7 @@ func DecodeUpdateMsg(msg []byte) (BGPRoute, error) {
 		}
 		err := AddAttrToRoute(&bgpRoute, &pathAttr)
 		if err != nil {
-			return bgpRoute, fmt.Errorf("cant decode update msg attribute: %v\n", err)
+			return bgpRoute, fmt.Errorf("cant update msg attribute data: %v\n", err)
 		}
 		//Size of path's attr heaer either 3 of 4 octets
 		if pathAttr.ExtendedLength {
@@ -300,19 +315,73 @@ func DecodeUpdateMsg(msg []byte) (BGPRoute, error) {
 	return bgpRoute, nil
 }
 
+func (bgpRoute *BGPRoute) AddV4NextHop(ipv4 string) error {
+	v4addr, err := IPv4ToUint32(ipv4)
+	if err != nil {
+		return err
+	}
+	buf := new(bytes.Buffer)
+	err = binary.Write(buf, binary.BigEndian, &v4addr)
+	if err != nil {
+		return err
+	}
+	bgpRoute.NEXT_HOP = buf.Bytes()
+	return nil
+}
+
+//TODO: add withdraw
+func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
+	encodedUpdate := make([]byte, 0)
+	buf := new(bytes.Buffer)
+	updMsgLen := UpdateMsgLengths{WithdrawRoutesLength: 0}
+	if len(bgpRoute.NEXT_HOP) == 0 {
+		return nil, fmt.Errorf("no mandatory attr(next-hop) in bgp update\n")
+	}
+	encodedAttrs, err := EncodeBGPRouteAttrs(bgpRoute)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode path attributes: %v\n", err)
+	}
+	//placeholder
+	updMsgLen.TotalPathAttrsLength = uint16(len(encodedAttrs))
+	err = binary.Write(buf, binary.BigEndian, &updMsgLen.WithdrawRoutesLength)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode withdar routes length\n")
+	}
+	//TODO: add withdraw
+	encodedUpdate = append(encodedUpdate, buf.Bytes()...)
+	err = binary.Write(buf, binary.BigEndian, &updMsgLen.TotalPathAttrsLength)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode total path attrs length\n")
+	}
+	encodedUpdate = append(encodedUpdate, buf.Bytes()[TWO_OCTET_SHIFT+updMsgLen.WithdrawRoutesLength:]...)
+	encodedUpdate = append(encodedUpdate, encodedAttrs...)
+	msgHdr := MsgHeader{Type: BGP_UPDATE_MSG, Length: uint16(len(encodedUpdate))}
+	encMsgHdr, err := EncodeMsgHeader(&msgHdr)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode update msg hdr: %v\n", err)
+	}
+	encodedUpdate = append(encMsgHdr, encodedUpdate...)
+	return encodedUpdate, nil
+}
+
 func DecodeNotificationMsg(msg []byte) (NotificationMsg, error) {
 	offset := MSG_HDR_SIZE
 	notification := NotificationMsg{}
 	reader := bytes.NewReader(msg[offset:])
-	err := binary.Read(reader, binary.BigEndian, &(notification.ErrorCode))
-	if err != nil {
-		return notification, errors.New("cant decode notification")
-	}
-	err = binary.Read(reader, binary.BigEndian, &(notification.ErrorSubcode))
+	err := binary.Read(reader, binary.BigEndian, &notification)
 	if err != nil {
 		return notification, errors.New("cant decode notification")
 	}
 	return notification, nil
+}
+
+func EncodeNotificationMsg(notification *NotificationMsg) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.BigEndian, notification)
+	if err != nil {
+		return nil, fmt.Errorf("can encode notification msg: %v\n", err)
+	}
+	return buf.Bytes(), nil
 }
 
 func GenerateKeepalive() []byte {

@@ -119,7 +119,7 @@ func TestDecodeUpdMsgWithAsPath(t *testing.T) {
 func TestEncodeKeepaliveMsg(t *testing.T) {
 	encodedKA, _ := hex.DecodeString(hexKA)
 	encKA := GenerateKeepalive()
-	for cntr := 19; cntr < len(encKA); cntr++ {
+	for cntr := 0; cntr < len(encKA); cntr++ {
 		if encKA[cntr] != encodedKA[cntr] {
 			t.Errorf("byte of encoded msg is not equal to etalon's msg")
 		}
@@ -136,4 +136,47 @@ func TestDecodeNotificationMsg(t *testing.T) {
 	if notification.ErrorCode != 6 && notification.ErrorSubcode != 7 {
 		t.Errorf("error during notification decoding(code and subcode are not equal to etalon)")
 	}
+}
+
+func TestEncodeNotificationMsg(t *testing.T) {
+	encodedNotification, _ := hex.DecodeString(hexNotification)
+	notification := NotificationMsg{ErrorCode: BGP_CASE_ERROR, ErrorSubcode: BGP_CASE_ERROR_COLLISION}
+	encNotification, err := EncodeNotificationMsg(&notification)
+	if err != nil {
+		fmt.Println(err)
+		t.Errorf("error during notification encoding")
+	}
+	for cntr := 0; cntr < len(encNotification); cntr++ {
+		if encNotification[cntr] != encodedNotification[cntr+19] {
+			t.Errorf("byte of encoded msg is not equal to etalon's msg")
+		}
+	}
+
+}
+
+func TestEncodeUpdateMsg1(t *testing.T) {
+	bgpRoute := BGPRoute{
+		ORIGIN:          ORIGIN_IGP,
+		MULTI_EXIT_DISC: uint32(123),
+		LOCAL_PREF:      uint32(11),
+		ATOMIC_AGGR:     true,
+	}
+	err := bgpRoute.AddV4NextHop("10.0.0.2")
+	if err != nil {
+		fmt.Println(err)
+		t.Errorf("cant encode update msg")
+	}
+	data, err := EncodeUpdateMsg(&bgpRoute)
+	if err != nil {
+		fmt.Println(err)
+		t.Errorf("cant encode update msg")
+	}
+	bgpRoute2, err := DecodeUpdateMsg(data)
+	if err != nil {
+		fmt.Println(err)
+		t.Errorf("cant decode encoded update")
+	}
+	fmt.Println(bgpRoute)
+	fmt.Println("########################")
+	fmt.Println(bgpRoute2)
 }
