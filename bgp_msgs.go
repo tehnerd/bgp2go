@@ -290,29 +290,36 @@ func DecodeUpdateMsg(msg []byte) (BGPRoute, error) {
 		int(updMsgLen.TotalPathAttrsLength) + MSG_HDR_SIZE)
 	//right now we are trying to implement minimal functionality. so that means ipv4 only
 	//TODO: ipv6 must must (or even MP-BGP)
+	err = DecodeIPv4Route(offset, msg, &bgpRoute)
+	if err != nil {
+		return bgpRoute, err
+	}
+	return bgpRoute, nil
+}
+
+func DecodeIPv4Route(offset int, msg []byte, bgpRoute *BGPRoute) error {
 	prefix := IPV4_NLRI{}
 	for offset < len(msg) {
-		err = binary.Read(bytes.NewReader(msg[offset:]), binary.BigEndian, &(prefix.Length))
+		err := binary.Read(bytes.NewReader(msg[offset:]), binary.BigEndian, &(prefix.Length))
 		if err != nil {
-			return bgpRoute, fmt.Errorf("cant decode update msg prefix length: %v\n", err)
+			return fmt.Errorf("cant decode update msg prefix length: %v\n", err)
 		}
 		offset += ONE_OCTET_SHIFT
 		//awsm trick from BIRD
 		prefixBits := int((prefix.Length + 7) / 8)
-		prefixPart := msg[offset : offset+prefixBits]
+		prefixPart := make([]byte, 0)
+		prefixPart = append(prefixPart, msg[offset:offset+prefixBits]...)
 		for cntr := prefixBits; cntr < 4; cntr++ {
 			prefixPart = append(prefixPart, byte(0))
 		}
 		err = binary.Read(bytes.NewReader(prefixPart), binary.BigEndian, &(prefix.Prefix))
 		if err != nil {
-			return bgpRoute, fmt.Errorf("cant decode update msg prefix: %v\n", err)
+			return fmt.Errorf("cant decode update msg prefix: %v\n", err)
 		}
-
 		bgpRoute.Routes = append(bgpRoute.Routes, prefix)
-		//size of prefix len + ipv4 address
-		offset += FOUR_OCTET_SHIFT
+		offset += prefixBits
 	}
-	return bgpRoute, nil
+	return nil
 }
 
 func (bgpRoute *BGPRoute) AddV4NextHop(ipv4 string) error {
@@ -351,7 +358,10 @@ func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cant encode path attributes: %v\n", err)
 	}
-	//placeholder
+	encodedRoutes, err := EncodeIPv4Route(bgpRoute)
+	if err != nil {
+		return nil, fmt.Errorf("cant encoded bgp routes: %v\n", err)
+	}
 	updMsgLen.TotalPathAttrsLength = uint16(len(encodedAttrs))
 	err = binary.Write(buf, binary.BigEndian, &updMsgLen.WithdrawRoutesLength)
 	if err != nil {
@@ -365,6 +375,7 @@ func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 	}
 	encodedUpdate = append(encodedUpdate, buf.Bytes()[TWO_OCTET_SHIFT+updMsgLen.WithdrawRoutesLength:]...)
 	encodedUpdate = append(encodedUpdate, encodedAttrs...)
+	encodedUpdate = append(encodedUpdate, encodedRoutes...)
 	msgHdr := MsgHeader{Type: BGP_UPDATE_MSG, Length: uint16(len(encodedUpdate))}
 	encMsgHdr, err := EncodeMsgHeader(&msgHdr)
 	if err != nil {
@@ -372,6 +383,28 @@ func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 	}
 	encodedUpdate = append(encMsgHdr, encodedUpdate...)
 	return encodedUpdate, nil
+}
+
+func EncodeIPv4Route(bgpRoute *BGPRoute) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	routes := make([]byte, 0)
+	prefixBits := 0
+	notUsedBits := 0
+	for _, route := range bgpRoute.Routes {
+		err := binary.Write(buf, binary.BigEndian, route.Length)
+		if err != nil {
+			return routes, fmt.Errorf("error during encoding routes: %v\n", err)
+		}
+		err = binary.Write(buf, binary.LittleEndian, route.Prefix)
+		if err != nil {
+			return routes, fmt.Errorf("error during encoding routes: %v\n", err)
+		}
+		prefixBits = int((route.Length + 7) / 8)
+		notUsedBits = FOUR_OCTET_SHIFT - prefixBits
+		routes = append(routes, buf.Next(ONE_OCTET_SHIFT+prefixBits)...)
+		buf.Next(notUsedBits)
+	}
+	return routes, nil
 }
 
 func DecodeNotificationMsg(msg []byte) (NotificationMsg, error) {
@@ -400,4 +433,16 @@ func GenerateKeepalive() []byte {
 	keepAlive.Type = BGP_KEEPALIVE_MSG
 	kaMsg, _ := EncodeMsgHeader(&keepAlive)
 	return kaMsg
+}
+
+func GenerateEndOfRIB() []byte {
+	encodedUpdate := make([]byte, 0)
+	buf := new(bytes.Buffer)
+	updMsgLen := UpdateMsgLengths{WithdrawRoutesLength: 0, TotalPathAttrsLength: 0}
+	binary.Write(buf, binary.BigEndian, &updMsgLen)
+	encodedUpdate = append(encodedUpdate, buf.Bytes()...)
+	msgHdr := MsgHeader{Type: BGP_UPDATE_MSG, Length: uint16(len(encodedUpdate))}
+	encMsgHdr, _ := EncodeMsgHeader(&msgHdr)
+	encodedUpdate = append(encMsgHdr, encodedUpdate...)
+	return encodedUpdate
 }

@@ -161,6 +161,12 @@ func TestEncodeUpdateMsg1(t *testing.T) {
 		LOCAL_PREF:      uint32(11),
 		ATOMIC_AGGR:     true,
 	}
+	p1, _ := IPv4ToUint32("1.92.0.0")
+	p2, _ := IPv4ToUint32("11.92.128.0")
+	p3, _ := IPv4ToUint32("1.1.1.10")
+	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 12, Prefix: p1})
+	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 22, Prefix: p2})
+	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 32, Prefix: p3})
 	err := bgpRoute.AddV4NextHop("10.0.0.2")
 	if err != nil {
 		fmt.Println(err)
@@ -179,6 +185,15 @@ func TestEncodeUpdateMsg1(t *testing.T) {
 	fmt.Println(bgpRoute)
 	fmt.Println("########################")
 	fmt.Println(bgpRoute2)
+	PrintBgpUpdate(&bgpRoute2)
 	ipv4, _ := DecodeV4NextHop(&bgpRoute2)
 	fmt.Println(Uint32IPv4ToString(ipv4))
+}
+
+func TestEncodeEndOfRIB(t *testing.T) {
+	eor := GenerateEndOfRIB()
+	if len(eor) != 23 {
+		fmt.Println(eor)
+		t.Errorf("error during EndOfRib marker generation")
+	}
 }
