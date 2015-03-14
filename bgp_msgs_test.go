@@ -194,6 +194,7 @@ func TestEncodeUpdateMsg1(t *testing.T) {
 			break
 		}
 	}
+	fmt.Println(len(data))
 	fmt.Println(bgpRoute)
 	fmt.Println("########################")
 	fmt.Println(bgpRoute2)

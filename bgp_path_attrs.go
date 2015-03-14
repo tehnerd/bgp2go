@@ -112,12 +112,19 @@ func EncodeBGPRouteAttrs(bgpRoute *BGPRoute) ([]byte, error) {
 		return nil, err
 	}
 	encodedAttrs = append(encodedAttrs, data...)
+
 	data, err = EncodeNextHopAttr(bgpRoute.NEXT_HOP, &pathAttr)
 	if err != nil {
 		return nil, err
 	}
-
 	encodedAttrs = append(encodedAttrs, data...)
+
+	data, err = EncodeASPathAttr(bgpRoute.AS_PATH, &pathAttr)
+	if err != nil {
+		return nil, err
+	}
+	encodedAttrs = append(encodedAttrs, data...)
+
 	if bgpRoute.MULTI_EXIT_DISC != 0 {
 		data, err = EncodeMEDAttr(&bgpRoute.MULTI_EXIT_DISC, &pathAttr)
 		if err != nil {
@@ -240,6 +247,45 @@ func EncodeNextHopAttr(nh []byte, pathAttr *PathAttr) ([]byte, error) {
 	encodedAttr, err := EncodePathAttr(pathAttr, encData)
 	if err != nil {
 		return nil, fmt.Errorf("error during ORIGIN attr encoding: %v\n", err)
+	}
+	return encodedAttr, nil
+}
+
+/*
+TODO: lots of things must be implemented.(for example as_path can has more than one
+path_segment. also not sure will it work with non zero as_path (gonna test/fix it later,
+right now i need only update msg with empty as_path)
+*/
+func EncodeASPathAttr(pathSegment PathSegment, pathAttr *PathAttr) ([]byte, error) {
+	pathAttr.AttrFlags = BAF_TRANSITIVE
+	pathAttr.AttrTypeCode = BA_AS_PATH
+	encData := make([]byte, 0)
+	if pathSegment.PSValue != nil {
+		buf := new(bytes.Buffer)
+		err := binary.Write(buf, binary.BigEndian, &pathSegment.PSType)
+		if err != nil {
+			return nil, fmt.Errorf("error during AS_PATH ps_type attr encoding: %v\n", err)
+		}
+		err = binary.Write(buf, binary.BigEndian, &pathSegment.PSLength)
+		if err != nil {
+			return nil, fmt.Errorf("error during AS_PATH ps_length attr encoding: %v\n", err)
+		}
+		for _, asn := range pathSegment.PSValue {
+			err = binary.Write(buf, binary.BigEndian, &asn)
+			if err != nil {
+				return nil, fmt.Errorf("error during AS_PATH asn attr encoding: %v\n", err)
+			}
+		}
+		encData = append(encData, buf.Bytes()...)
+	}
+	if len(encData) > 255 {
+		pathAttr.ExtendedLength = true
+	} else {
+		pathAttr.ExtendedLength = false
+	}
+	encodedAttr, err := EncodePathAttr(pathAttr, encData)
+	if err != nil {
+		return nil, fmt.Errorf("error during AS_PATH attr encoding: %v\n", err)
 	}
 	return encodedAttr, nil
 }

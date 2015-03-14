@@ -218,6 +218,7 @@ func AddAttrToRoute(bgpRoute *BGPRoute, pathAttr *PathAttr) error {
 	case BA_NEXT_HOP:
 		bgpRoute.NEXT_HOP = append(bgpRoute.NEXT_HOP, pathAttr.Data...)
 	case BA_AS_PATH:
+		//TODO: as_path can has more than one path segment
 		if pathAttr.AttrLength != 0 {
 			err = binary.Read(reader, binary.BigEndian, &(bgpRoute.AS_PATH.PSType))
 			err = binary.Read(reader, binary.BigEndian, &(bgpRoute.AS_PATH.PSLength))
@@ -350,7 +351,6 @@ func DecodeV4NextHop(bgpRoute *BGPRoute) (uint32, error) {
 	return ipv4, nil
 }
 
-//TODO: add withdraw
 func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 	encodedUpdate := make([]byte, 0)
 	buf := new(bytes.Buffer)
