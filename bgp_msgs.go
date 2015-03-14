@@ -257,8 +257,14 @@ func DecodeUpdateMsg(msg []byte) (BGPRoute, error) {
 	if err != nil {
 		return bgpRoute, fmt.Errorf("cant decode update msg withdraw length: %v\n", err)
 	}
+	offset = MSG_HDR_SIZE + TWO_OCTET_SHIFT
+	withdrawRoutes, err := DecodeIPv4Route(offset, offset+int(updMsgLen.WithdrawRoutesLength),
+		msg)
+	if err != nil {
+		return bgpRoute, err
+	}
+	bgpRoute.WithdrawRoutes = withdrawRoutes
 	offset = MSG_HDR_SIZE + TWO_OCTET_SHIFT + int(updMsgLen.WithdrawRoutesLength)
-	//TODO: read withdraw routes
 	err = binary.Read(bytes.NewReader(msg[offset:]), binary.BigEndian, &(updMsgLen.TotalPathAttrsLength))
 	if err != nil {
 		return bgpRoute, fmt.Errorf("cant decode update msg total path attr length: %v\n", err)
@@ -286,19 +292,21 @@ func DecodeUpdateMsg(msg []byte) (BGPRoute, error) {
 		int(updMsgLen.TotalPathAttrsLength) + MSG_HDR_SIZE)
 	//right now we are trying to implement minimal functionality. so that means ipv4 only
 	//TODO: ipv6 must must (or even MP-BGP)
-	err = DecodeIPv4Route(offset, msg, &bgpRoute)
+	routes, err := DecodeIPv4Route(offset, len(msg), msg)
 	if err != nil {
 		return bgpRoute, err
 	}
+	bgpRoute.Routes = routes
 	return bgpRoute, nil
 }
 
-func DecodeIPv4Route(offset int, msg []byte, bgpRoute *BGPRoute) error {
+func DecodeIPv4Route(offset, finalPosition int, msg []byte) ([]IPV4_NLRI, error) {
 	prefix := IPV4_NLRI{}
-	for offset < len(msg) {
+	prefixList := make([]IPV4_NLRI, 0)
+	for offset < finalPosition {
 		err := binary.Read(bytes.NewReader(msg[offset:]), binary.BigEndian, &(prefix.Length))
 		if err != nil {
-			return fmt.Errorf("cant decode update msg prefix length: %v\n", err)
+			return prefixList, fmt.Errorf("cant decode update msg prefix length: %v\n", err)
 		}
 		offset += ONE_OCTET_SHIFT
 		//awsm trick from BIRD
@@ -310,12 +318,12 @@ func DecodeIPv4Route(offset int, msg []byte, bgpRoute *BGPRoute) error {
 		}
 		err = binary.Read(bytes.NewReader(prefixPart), binary.BigEndian, &(prefix.Prefix))
 		if err != nil {
-			return fmt.Errorf("cant decode update msg prefix: %v\n", err)
+			return prefixList, fmt.Errorf("cant decode update msg prefix: %v\n", err)
 		}
-		bgpRoute.Routes = append(bgpRoute.Routes, prefix)
+		prefixList = append(prefixList, prefix)
 		offset += prefixBits
 	}
-	return nil
+	return prefixList, nil
 }
 
 func (bgpRoute *BGPRoute) AddV4NextHop(ipv4 string) error {
