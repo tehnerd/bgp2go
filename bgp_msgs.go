@@ -110,11 +110,6 @@ type NotificationMsg struct {
 	*/
 }
 
-type IPv4Route struct {
-	PrefixLength uint8
-	Prefix       uint32
-}
-
 type PathSegment struct {
 	PSType   uint8
 	PSLength uint8
@@ -141,6 +136,7 @@ type BGPRoute struct {
 	ATOMIC_AGGR     bool
 	AGGREGATOR      Agregator
 	Routes          []IPV4_NLRI
+	WithdrawRoutes  []IPV4_NLRI
 }
 
 func DecodeMsgHeader(msg []byte) (MsgHeader, error) {
@@ -328,7 +324,7 @@ func (bgpRoute *BGPRoute) AddV4NextHop(ipv4 string) error {
 		return err
 	}
 	buf := new(bytes.Buffer)
-	err = binary.Write(buf, binary.LittleEndian, &v4addr)
+	err = binary.Write(buf, binary.BigEndian, &v4addr)
 	if err != nil {
 		return err
 	}
@@ -350,7 +346,11 @@ func DecodeV4NextHop(bgpRoute *BGPRoute) (uint32, error) {
 func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 	encodedUpdate := make([]byte, 0)
 	buf := new(bytes.Buffer)
-	updMsgLen := UpdateMsgLengths{WithdrawRoutesLength: 0}
+	encodedWithdrawRoutes, err := EncodeIPv4Route(bgpRoute.WithdrawRoutes)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode withdraw routes")
+	}
+	updMsgLen := UpdateMsgLengths{WithdrawRoutesLength: uint16(len(encodedWithdrawRoutes))}
 	if len(bgpRoute.NEXT_HOP) == 0 {
 		return nil, fmt.Errorf("no mandatory attr(next-hop) in bgp update\n")
 	}
@@ -358,7 +358,7 @@ func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cant encode path attributes: %v\n", err)
 	}
-	encodedRoutes, err := EncodeIPv4Route(bgpRoute)
+	encodedRoutes, err := EncodeIPv4Route(bgpRoute.Routes)
 	if err != nil {
 		return nil, fmt.Errorf("cant encoded bgp routes: %v\n", err)
 	}
@@ -367,13 +367,13 @@ func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cant encode withdar routes length\n")
 	}
-	//TODO: add withdraw
 	encodedUpdate = append(encodedUpdate, buf.Bytes()...)
+	encodedUpdate = append(encodedUpdate, encodedWithdrawRoutes...)
 	err = binary.Write(buf, binary.BigEndian, &updMsgLen.TotalPathAttrsLength)
 	if err != nil {
 		return nil, fmt.Errorf("cant encode total path attrs length\n")
 	}
-	encodedUpdate = append(encodedUpdate, buf.Bytes()[TWO_OCTET_SHIFT+updMsgLen.WithdrawRoutesLength:]...)
+	encodedUpdate = append(encodedUpdate, buf.Bytes()[TWO_OCTET_SHIFT:]...)
 	encodedUpdate = append(encodedUpdate, encodedAttrs...)
 	encodedUpdate = append(encodedUpdate, encodedRoutes...)
 	msgHdr := MsgHeader{Type: BGP_UPDATE_MSG, Length: uint16(len(encodedUpdate))}
@@ -385,17 +385,17 @@ func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 	return encodedUpdate, nil
 }
 
-func EncodeIPv4Route(bgpRoute *BGPRoute) ([]byte, error) {
+func EncodeIPv4Route(routesSlice []IPV4_NLRI) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	routes := make([]byte, 0)
 	prefixBits := 0
 	notUsedBits := 0
-	for _, route := range bgpRoute.Routes {
+	for _, route := range routesSlice {
 		err := binary.Write(buf, binary.BigEndian, route.Length)
 		if err != nil {
 			return routes, fmt.Errorf("error during encoding routes: %v\n", err)
 		}
-		err = binary.Write(buf, binary.LittleEndian, route.Prefix)
+		err = binary.Write(buf, binary.BigEndian, route.Prefix)
 		if err != nil {
 			return routes, fmt.Errorf("error during encoding routes: %v\n", err)
 		}

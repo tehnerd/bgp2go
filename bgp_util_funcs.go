@@ -23,7 +23,7 @@ func IPv4ToUint32(ipv4 string) (uint32, error) {
 		if err != nil {
 			return 0, errors.New("cant convert ipv4 to string")
 		}
-		ipv4int += uint32(tmpVal << uint(cntr*BITS_IN_OCTET))
+		ipv4int += uint32(tmpVal << uint((3-cntr)*BITS_IN_OCTET))
 	}
 	return ipv4int, nil
 }

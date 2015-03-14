@@ -164,9 +164,11 @@ func TestEncodeUpdateMsg1(t *testing.T) {
 	p1, _ := IPv4ToUint32("1.92.0.0")
 	p2, _ := IPv4ToUint32("11.92.128.0")
 	p3, _ := IPv4ToUint32("1.1.1.10")
+	p4, _ := IPv4ToUint32("192.168.0.0")
 	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 12, Prefix: p1})
 	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 22, Prefix: p2})
 	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 32, Prefix: p3})
+	bgpRoute.WithdrawRoutes = append(bgpRoute.WithdrawRoutes, IPV4_NLRI{Length: 16, Prefix: p4})
 	err := bgpRoute.AddV4NextHop("10.0.0.2")
 	if err != nil {
 		fmt.Println(err)
@@ -181,6 +183,16 @@ func TestEncodeUpdateMsg1(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("cant decode encoded update")
+	}
+	data2, _ := EncodeUpdateMsg(&bgpRoute2)
+	if len(data) != len(data2) {
+		t.Errorf("error in encoding/decoding of the same msg")
+	}
+	for cntr := 0; cntr < len(data); cntr++ {
+		if data[cntr] != data2[cntr] {
+			t.Errorf("error in encoding/decoding of the same msg")
+			break
+		}
 	}
 	fmt.Println(bgpRoute)
 	fmt.Println("########################")
