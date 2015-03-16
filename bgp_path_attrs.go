@@ -113,9 +113,12 @@ func EncodeBGPRouteAttrs(bgpRoute *BGPRoute) ([]byte, error) {
 	}
 	encodedAttrs = append(encodedAttrs, data...)
 
-	data, err = EncodeNextHopAttr(bgpRoute.NEXT_HOP, &pathAttr)
-	if err != nil {
-		return nil, err
+	//For MP-BGP next_hop is not a mandatory attribute; coz we have another one in mp-nlri
+	if bgpRoute.NEXT_HOP != nil {
+		data, err = EncodeNextHopAttr(bgpRoute.NEXT_HOP, &pathAttr)
+		if err != nil {
+			return nil, err
+		}
 	}
 	encodedAttrs = append(encodedAttrs, data...)
 
