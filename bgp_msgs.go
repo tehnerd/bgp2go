@@ -180,7 +180,14 @@ func EncodeOpenMsg(openMsg *OpenMsg) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("cant encode open msg")
 	}
-	return buf.Bytes(), nil
+	encodedOpen := buf.Bytes()
+	msgHdr := MsgHeader{Type: BGP_OPEN_MSG, Length: MSG_HDR_SIZE + uint16(len(encodedOpen))}
+	encodedHdr, err := EncodeMsgHeader(&msgHdr)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode open msg: %v\n", err)
+	}
+	encodedOpen = append(encodedHdr, encodedOpen...)
+	return encodedOpen, nil
 }
 
 func DecodeOptionalParamHeader(msg []byte) (OptionalParamHeader, error) {
@@ -384,7 +391,7 @@ func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 	encodedUpdate = append(encodedUpdate, buf.Bytes()[TWO_OCTET_SHIFT:]...)
 	encodedUpdate = append(encodedUpdate, encodedAttrs...)
 	encodedUpdate = append(encodedUpdate, encodedRoutes...)
-	msgHdr := MsgHeader{Type: BGP_UPDATE_MSG, Length: uint16(len(encodedUpdate))}
+	msgHdr := MsgHeader{Type: BGP_UPDATE_MSG, Length: MSG_HDR_SIZE + uint16(len(encodedUpdate))}
 	encMsgHdr, err := EncodeMsgHeader(&msgHdr)
 	if err != nil {
 		return nil, fmt.Errorf("cant encode update msg hdr: %v\n", err)
@@ -449,7 +456,7 @@ func GenerateEndOfRIB() []byte {
 	updMsgLen := UpdateMsgLengths{WithdrawRoutesLength: 0, TotalPathAttrsLength: 0}
 	binary.Write(buf, binary.BigEndian, &updMsgLen)
 	encodedUpdate = append(encodedUpdate, buf.Bytes()...)
-	msgHdr := MsgHeader{Type: BGP_UPDATE_MSG, Length: uint16(len(encodedUpdate))}
+	msgHdr := MsgHeader{Type: BGP_UPDATE_MSG, Length: MSG_HDR_SIZE + uint16(len(encodedUpdate))}
 	encMsgHdr, _ := EncodeMsgHeader(&msgHdr)
 	encodedUpdate = append(encMsgHdr, encodedUpdate...)
 	return encodedUpdate

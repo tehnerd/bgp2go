@@ -169,13 +169,13 @@ func StartBGPNeighbourContext(context *BGPNeighbourContext) {
 	keepaliveFeedback := make(chan uint8)
 	msgBuf := make([]byte, 0)
 	context.fsm.Event("Start")
+	context.fsm.KeepaliveTime = 30
 RECONNECT:
 	go GetRouterID(controlChan, context.ToMainContext)
 	err := ConnectToNeighbour(context.NeighbourAddr,
 		fromWriteError, toWriteError, readError,
 		readChan, writeChan, controlChan)
 
-	loop := 1
 	if err != nil {
 		if err == CANT_CONNECT_ERROR {
 			context.fsm.ConnectRetryCounter++
@@ -190,6 +190,8 @@ RECONNECT:
 			return
 		}
 	}
+
+	loop := 1
 	if context.RouterID == 0 {
 		for loop == 1 {
 			context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
@@ -199,6 +201,7 @@ RECONNECT:
 			switch resp.Cmnd {
 			case "RouterID":
 				if resp.CmndData != "0" {
+					fmt.Print(resp.CmndData)
 					loop = 0
 					id, _ := strconv.ParseUint(resp.CmndData, 10, 32)
 					context.RouterID = uint32(id)
@@ -208,6 +211,8 @@ RECONNECT:
 			}
 		}
 	}
+	//HACK; FOR POC; GONNA REMOVE IT
+	GenerateOpenMsg(context, writeChan)
 
 	loop = 1
 	for loop == 1 {
@@ -256,6 +261,9 @@ RECONNECT:
 					encodedKA := GenerateKeepalive()
 					writeChan <- encodedOpen
 					writeChan <- encodedKA
+				case "Keepalive":
+					encodedKA := GenerateKeepalive()
+					writeChan <- encodedKA
 				default:
 					//TODO; same as above
 					goto RECONNECT
@@ -301,4 +309,15 @@ func SendKeepalive(writeChan chan []byte, sleepTime uint32, feedbackChan chan ui
 			continue
 		}
 	}
+}
+
+func GenerateOpenMsg(context *BGPNeighbourContext, writeChan chan []byte) {
+	openMsg := OpenMsg{Version: uint8(4), MyASN: uint16(context.ASN),
+		BGPID: context.RouterID, HoldTime: uint16(90)}
+	encodedOpen, err := EncodeOpenMsg(&openMsg)
+	if err != nil {
+		return
+	}
+	writeChan <- encodedOpen
+	context.fsm.Event("OpenSent")
 }

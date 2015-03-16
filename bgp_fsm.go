@@ -32,9 +32,16 @@ func (fsm *FSM) Event(event string) string {
 			fsm.State = "OpenConfirm"
 			// we must send back open msg + keepalive
 			return "OpenKA"
+		} else if fsm.State == "OpenSent" {
+			return "Keepalive"
+		}
+	case "OpenSent":
+		if fsm.State == "Connect" {
+			fsm.State = "OpenSent"
+			return "WaitConfirm"
 		}
 	case "Keepalive":
-		if fsm.State == "OpenConfirm" {
+		if fsm.State == "OpenConfirm" || fsm.State == "OpenSent" {
 			fsm.State = "Established"
 			return "Established"
 		} else if fsm.State == "Established" {
