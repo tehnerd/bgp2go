@@ -38,6 +38,8 @@ func ConnectToNeighbour(neighbour string,
 	localAddr := tcpConn.LocalAddr()
 	//sending our localaddress; so it can be used as NEXT_HOP
 	controlChan <- strings.Split(localAddr.String(), ":")[0]
+	go ReadFromNeighbour(tcpConn, readChan, readError)
+	go WriteToNeighbour(tcpConn, writeChan, fromWriteError, toWriteError)
 	return nil
 }
 
