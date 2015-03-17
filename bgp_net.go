@@ -18,6 +18,25 @@ var (
 	CANT_CONNECT_ERROR = errors.New("cant connect to remote peer")
 )
 
+type SockControlChans struct {
+	fromWriteError chan uint8
+	toWriteError   chan uint8
+	readError      chan uint8
+	readChan       chan []byte
+	writeChan      chan []byte
+	controlChan    chan string
+}
+
+func (sockChans *SockControlChans) Init() {
+	sockChans.fromWriteError = make(chan uint8)
+	sockChans.toWriteError = make(chan uint8)
+	sockChans.readError = make(chan uint8)
+	sockChans.readChan = make(chan []byte)
+	sockChans.writeChan = make(chan []byte)
+	sockChans.controlChan = make(chan string)
+
+}
+
 func ConnectToNeighbour(neighbour string,
 	fromWriteError, toWriteError, readError chan uint8,
 	readChan, writeChan chan []byte,
@@ -89,4 +108,51 @@ func WriteToNeighbour(sock *net.TCPConn, writeChan chan []byte,
 	   it both cases(closing a working connection, or clossing a clossed) that shouldnt be a problem.
 	*/
 	sock.Close()
+}
+
+/*
+   simple_bgp_injector specific routines
+
+*/
+
+func BGPListenForConnection(toMainContext chan BGPCommand) error {
+	addr := strings.Join([]string{"", BGP_PORT}, ":")
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	//TODO: log instead of return
+	if err != nil {
+		return fmt.Errorf("cant parse local address: %v\n", err)
+	}
+	servSock, err := net.ListenTCP("tcp", tcpAddr)
+	if err != nil {
+		return fmt.Errorf("cant bind to local address: %v\n", err)
+	}
+	for {
+		sock, err := servSock.AcceptTCP()
+		if err != nil {
+			sock.Close()
+			continue
+		}
+		go ProcessPeerConection(sock, toMainContext)
+	}
+}
+
+func ProcessPeerConection(sock *net.TCPConn, toMainContext chan BGPCommand) {
+	radr := strings.Split(sock.RemoteAddr().String(), ":")[0]
+	sockChans := SockControlChans{}
+	sockChans.Init()
+	toMainContext <- BGPCommand{Cmnd: "NewConnection", CmndData: radr,
+		ResponseChan: sockChans.controlChan}
+	response := <-sockChans.controlChan
+	if response == "teardown" {
+		sock.Close()
+		return
+	}
+	ladr := strings.Split(sock.LocalAddr().String(), ":")[0]
+	toMainContext <- BGPCommand{Cmnd: "NewRouterID", CmndData: ladr}
+	go ReadFromNeighbour(sock, sockChans.readChan, sockChans.readError)
+	go WriteToNeighbour(sock, sockChans.writeChan, sockChans.fromWriteError,
+		sockChans.toWriteError)
+	toMainContext <- BGPCommand{Cmnd: "AddPassiveNeighbour", CmndData: radr,
+		sockChans: sockChans}
+
 }

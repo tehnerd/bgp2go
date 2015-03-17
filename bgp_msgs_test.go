@@ -147,7 +147,7 @@ func TestEncodeNotificationMsg(t *testing.T) {
 		t.Errorf("error during notification encoding")
 	}
 	for cntr := 0; cntr < len(encNotification); cntr++ {
-		if encNotification[cntr] != encodedNotification[cntr+19] {
+		if encNotification[cntr] != encodedNotification[cntr] {
 			t.Errorf("byte of encoded msg is not equal to etalon's msg")
 		}
 	}

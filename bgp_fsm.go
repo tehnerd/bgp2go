@@ -5,6 +5,7 @@ package bgp
 */
 type FSM struct {
 	State               string
+	DelayOpenTime       uint32
 	ConnectRetryCounter uint32
 	ConnectRetryTimer   uint32
 	ConnectRetryTime    uint32
@@ -23,10 +24,8 @@ type FSM struct {
 func (fsm *FSM) Event(event string) string {
 	switch event {
 	case "Start":
-		if fsm.State == "Idle" {
-			fsm.State = "Connect"
-			return "Connect"
-		}
+		fsm.State = "Connect"
+		return "Connect"
 	case "OpenRcv":
 		if fsm.State == "Connect" {
 			fsm.State = "OpenConfirm"

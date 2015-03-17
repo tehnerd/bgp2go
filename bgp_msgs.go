@@ -61,6 +61,9 @@ const (
 	/* Case errors subcodes */
 	BGP_CASE_ERROR_GENERIC   = 0
 	BGP_CASE_ERROR_COLLISION = 7
+
+	/* BGP Generic Error */
+	BGP_GENERIC_ERROR = 0
 )
 
 /*
@@ -434,12 +437,22 @@ func DecodeNotificationMsg(msg []byte) (NotificationMsg, error) {
 }
 
 func EncodeNotificationMsg(notification *NotificationMsg) ([]byte, error) {
+	encodedNotification := make([]byte, 0)
 	buf := new(bytes.Buffer)
 	err := binary.Write(buf, binary.BigEndian, notification)
 	if err != nil {
 		return nil, fmt.Errorf("can encode notification msg: %v\n", err)
 	}
-	return buf.Bytes(), nil
+	encodedNotification = append(encodedNotification, buf.Bytes()...)
+	msgHdr := MsgHeader{
+		Type:   BGP_NOTIFICATION_MSG,
+		Length: MSG_HDR_SIZE + uint16(len(encodedNotification))}
+	encMsgHdr, err := EncodeMsgHeader(&msgHdr)
+	if err != nil {
+		return nil, fmt.Errorf("can encode notification msg hdr: %v\n", err)
+	}
+	encodedNotification = append(encMsgHdr, encodedNotification...)
+	return encodedNotification, nil
 }
 
 func GenerateKeepalive() []byte {
