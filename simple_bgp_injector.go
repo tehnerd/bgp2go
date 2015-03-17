@@ -130,7 +130,7 @@ func (context *BGPContext) ProcessNeighbourCommand(cmnd BGPCommand) {
 
 	case "NewConnection":
 		neighbour, err := context.FindNeighbour(cmnd.CmndData)
-		if err == nil {
+		if err != nil {
 			cmnd.ResponseChan <- "teardown"
 			return
 		}
@@ -362,7 +362,7 @@ RECONNECT:
 		select {
 		case <-time.After(time.Duration(context.fsm.DelayOpenTime) * time.Second):
 			if context.fsm.State == "Connect" {
-				GenerateOpenMsg(context, localSockChans.writeChan)
+				GenerateOpenMsg(context, localSockChans.writeChan, "OpenSent")
 			}
 		case bgpMsg := <-localSockChans.readChan:
 			msgBuf = append(msgBuf, bgpMsg...)
@@ -390,7 +390,7 @@ RECONNECT:
 				}
 				switch hdr.Type {
 				case BGP_OPEN_MSG:
-					openMsg, err := DecodeOpenMsg(msgBuf[:hdr.Length])
+					openMsg, err := DecodeOpenMsg(msgBuf[MSG_HDR_SIZE:hdr.Length])
 					if err != nil {
 						//TODO: proper error subcodes; here and below
 						SendNotification(context, "OpenError", localSockChans,
@@ -422,17 +422,9 @@ RECONNECT:
 					}
 					switch state {
 					case "OpenKA":
-						//building open reply
-						if context.ASN != 0 {
-							//TODO: 32bit asn
-							openMsg.MyASN = uint16(context.ASN)
-						} else {
-							//Hack for ibgp to work w/o any prior configuration
-							context.ASN = uint32(openMsg.MyASN)
-						}
 						context.fsm.KeepaliveTime = uint32(openMsg.HoldTime / 3)
-						openMsg.BGPID = context.RouterID
-						encodedOpen, err := EncodeOpenMsg(&openMsg)
+						context.fsm.HoldTime = uint32(openMsg.HoldTime)
+						err := GenerateOpenMsg(context, localSockChans.writeChan, "")
 						if err != nil {
 							SendNotification(context, "OpenSendError", localSockChans,
 								BGP_OPEN_MSG_ERROR, BGP_GENERIC_ERROR)
@@ -446,7 +438,6 @@ RECONNECT:
 							}
 						}
 						encodedKA := GenerateKeepalive()
-						localSockChans.writeChan <- encodedOpen
 						localSockChans.writeChan <- encodedKA
 					case "Keepalive":
 						encodedKA := GenerateKeepalive()
@@ -516,15 +507,19 @@ func SendKeepalive(writeChan chan []byte, sleepTime uint32, feedbackChan chan ui
 	}
 }
 
-func GenerateOpenMsg(context *BGPNeighbourContext, writeChan chan []byte) {
+func GenerateOpenMsg(context *BGPNeighbourContext, writeChan chan []byte,
+	event string) error {
 	openMsg := OpenMsg{Version: uint8(4), MyASN: uint16(context.ASN),
-		BGPID: context.RouterID, HoldTime: uint16(90)}
+		BGPID: context.RouterID, HoldTime: uint16(context.fsm.HoldTime)}
 	encodedOpen, err := EncodeOpenMsg(&openMsg)
 	if err != nil {
-		return
+		return err
 	}
 	writeChan <- encodedOpen
-	context.fsm.Event("OpenSent")
+	if event != "" {
+		context.fsm.Event(event)
+	}
+	return nil
 }
 
 func SendNotification(context *BGPNeighbourContext, event string,
