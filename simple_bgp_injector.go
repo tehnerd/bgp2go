@@ -10,6 +10,7 @@ package bgp
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -20,17 +21,10 @@ type BGPContext struct {
 	ASN      uint32
 	RouterID uint32
 	//TODO: rib per afi/safi
-	Rib           RIBv4
+	RIBv4         []IPV4_NLRI
 	ListenLocal   bool
 	Neighbours    []BGPNeighbour
 	ToMainContext chan BGPCommand
-}
-
-/*
- IPv4 RIB
-*/
-type RIBv4 struct {
-	Routes []BGPRoute
 }
 
 /*
@@ -114,6 +108,10 @@ func (context *BGPContext) ProcessExternalCommand(cmnd BGPProcessMsg,
 	switch cmnd.Cmnd {
 	case "AddNeighbour":
 		context.AddNeighbour(cmnd.Data)
+	case "AddV4Route":
+		context.AddV4Route(cmnd.Data)
+	case "WithdrawV4Route":
+		context.WithdrawV4Route(cmnd.Data)
 	}
 }
 
@@ -167,15 +165,21 @@ func (context *BGPContext) ProcessNeighbourCommand(cmnd BGPCommand) {
 		context.ShouldCheckCollision(cmnd.From, false)
 
 	case "PassiveWonCollisionDetection", "PassiveClossed", "ActiveClossed",
-		"ActiveConnected":
+		"ActiveConnected", "Down", "Established", "PassiveEstablished":
 		context.ChangeNeighbourInfo(cmnd.From, cmnd.Cmnd)
+
+	case "PassiveTeardown":
+		context.RestartActiveNeighbour(cmnd.From)
+
+	case "ActiveStartConnection":
+		context.CheckNeighbourInfo(&cmnd)
 	}
 }
 
 func (context *BGPContext) FindNeighbour(neighbour string) (*BGPNeighbour, error) {
-	for _, existingNeighbour := range context.Neighbours {
+	for i, existingNeighbour := range context.Neighbours {
 		if existingNeighbour.Address == neighbour {
-			return &existingNeighbour, nil
+			return &context.Neighbours[i], nil
 		}
 	}
 	return nil, fmt.Errorf("Neighbour doesnt exists")
@@ -204,6 +208,27 @@ func (context *BGPContext) AddNeighbour(neighbour string) {
 		ToNeighbourContext: cmndChan,
 		NeighbourAddr:      neighbour}
 	go StartBGPNeighbourContext(&bgpNeighbourContext, false, SockControlChans{})
+}
+
+func (context *BGPContext) RestartActiveNeighbour(neighbour string) {
+	bgpNeighbour, err := context.FindNeighbour(neighbour)
+	if err != nil {
+		/*
+		   should never fails, coz we restarts already existing neighbour context
+		*/
+		return
+	}
+	if bgpNeighbour.CmndChan == bgpNeighbour.toPassiveNeighbourContext {
+		cmndChan := make(chan BGPCommand, 1)
+		bgpNeighbour.CmndChan = cmndChan
+	}
+	bgpNeighbourContext := BGPNeighbourContext{RouterID: context.RouterID,
+		ASN: context.ASN, ToMainContext: context.ToMainContext,
+		ToNeighbourContext: bgpNeighbour.CmndChan,
+		NeighbourAddr:      neighbour}
+
+	go StartBGPNeighbourContext(&bgpNeighbourContext, false, SockControlChans{})
+
 }
 
 func (context *BGPContext) AddPassiveNeighbour(neighbourAddr string, sockChans SockControlChans) {
@@ -257,6 +282,7 @@ func (context *BGPContext) ChangeNeighbourInfo(neighbourAddr string, cmnd string
 		//TODO: proper handling
 		return
 	}
+
 	switch cmnd {
 	case "PassiveWonCollisionDetection":
 		neighbour.CmndChan = neighbour.toPassiveNeighbourContext
@@ -266,14 +292,171 @@ func (context *BGPContext) ChangeNeighbourInfo(neighbourAddr string, cmnd string
 		neighbour.activeConnected = false
 	case "ActiveConnected":
 		neighbour.activeConnected = true
+	case "Established":
+		neighbour.State = "Established"
+		context.AdvertiseAllRoutesV4(neighbour.CmndChan)
+	case "PassiveEstablished":
+		neighbour.State = "Established"
+		neighbour.CmndChan = neighbour.toPassiveNeighbourContext
+		context.AdvertiseAllRoutesV4(neighbour.CmndChan)
+	case "Down":
+		neighbour.State = "Down"
 	}
 
 }
 
-func GetRouterID(fromConnect chan string, toMainContext chan BGPCommand) {
+func (context *BGPContext) CheckNeighbourInfo(cmnd *BGPCommand) {
+	neighbour, err := context.FindNeighbour(cmnd.From)
+	if err != nil {
+		return
+	}
+	switch cmnd.Cmnd {
+	case "ActiveStartConnection":
+		if neighbour.State == "Established" {
+			cmnd.ResponseChan <- "teardown"
+		} else {
+			cmnd.ResponseChan <- "continue"
+		}
+	}
+}
+
+func (context *BGPContext) AddV4Route(route string) {
+	//TODO:check/parse route
+	splittedRoute := strings.Split(route, "/")
+	if len(splittedRoute) != 2 {
+		return
+	}
+	val, err := strconv.ParseUint(splittedRoute[1], 10, 8)
+	if err != nil {
+		return
+	}
+	mask := uint8(val)
+	ipv4, err := IPv4ToUint32(splittedRoute[0])
+	if err != nil {
+		return
+	}
+
+	_, err = context.FindV4Route(ipv4, mask)
+	if err == nil {
+		//this means that route already exists
+		return
+	}
+
+	newRoute := IPV4_NLRI{Length: mask, Prefix: ipv4}
+	context.RIBv4 = append(context.RIBv4, newRoute)
+	context.AdvertiseRouteV4(newRoute)
+
+}
+
+func (context *BGPContext) WithdrawV4Route(route string) {
+	//TODO:check/parse route
+	splittedRoute := strings.Split(route, "/")
+	if len(splittedRoute) != 2 {
+		return
+	}
+	val, err := strconv.ParseUint(splittedRoute[1], 10, 8)
+	if err != nil {
+		return
+	}
+	mask := uint8(val)
+	ipv4, err := IPv4ToUint32(splittedRoute[0])
+	if err != nil {
+		return
+	}
+
+	err = context.DeleteV4Route(ipv4, mask)
+	if err != nil {
+		//this means that route doesnt exists
+		return
+	}
+
+	wRoute := IPV4_NLRI{Length: mask, Prefix: ipv4}
+	context.WithdrawRouteV4(wRoute)
+
+}
+
+func (context *BGPContext) FindV4Route(ipv4 uint32, mask uint8) (IPV4_NLRI, error) {
+	for _, nlri := range context.RIBv4 {
+		if nlri.Prefix == ipv4 && nlri.Length == mask {
+			return nlri, nil
+		}
+	}
+	return IPV4_NLRI{}, fmt.Errorf("route doesnt exists")
+}
+
+func (context *BGPContext) DeleteV4Route(ipv4 uint32, mask uint8) error {
+	for n, nlri := range context.RIBv4 {
+		if nlri.Prefix == ipv4 && nlri.Length == mask {
+			if n == (len(context.RIBv4) - 1) {
+				context.RIBv4 = context.RIBv4[:n]
+			} else {
+				context.RIBv4 = append(context.RIBv4[:n], context.RIBv4[n+1:]...)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("route doesnt exist")
+}
+
+/*
+This is BGPContext's fun because in future we could use info from context(for global lp,
+aspath etc
+*/
+func (context *BGPContext) GenerateUpdateRouteV4(ipv4 IPV4_NLRI) BGPRoute {
+	bgpRoute := BGPRoute{
+		ORIGIN:     ORIGIN_IGP,
+		LOCAL_PREF: 100,
+	}
+	bgpRoute.Routes = append(bgpRoute.Routes, ipv4)
+	return bgpRoute
+}
+
+func (context *BGPContext) GenerateWithdrawRouteV4(ipv4 IPV4_NLRI) BGPRoute {
+	bgpRoute := BGPRoute{}
+	bgpRoute.WithdrawRoutes = append(bgpRoute.WithdrawRoutes, ipv4)
+	return bgpRoute
+}
+
+func (context *BGPContext) AdvertiseRouteV4(ipv4 IPV4_NLRI) {
+	for _, neighbour := range context.Neighbours {
+		if neighbour.State == "Established" {
+			neighbour.CmndChan <- BGPCommand{
+				Cmnd:  "AdvertiseRouteV4",
+				Route: context.GenerateUpdateRouteV4(ipv4)}
+		}
+	}
+}
+
+func (context *BGPContext) WithdrawRouteV4(ipv4 IPV4_NLRI) {
+	for _, neighbour := range context.Neighbours {
+		if neighbour.State == "Established" {
+			neighbour.CmndChan <- BGPCommand{
+				Cmnd:  "WithdrawRouteV4",
+				Route: context.GenerateWithdrawRouteV4(ipv4)}
+		}
+	}
+}
+
+func (context *BGPContext) AdvertiseAllRoutesV4(cmndChan chan BGPCommand) {
+	for _, route := range context.RIBv4 {
+		/*
+		   TODO: pack more that one route per update; implement check, that msg size is less then
+		   bpg_max_msg_len
+		*/
+		cmndChan <- BGPCommand{
+			Cmnd:  "AdvertiseRouteV4",
+			Route: context.GenerateUpdateRouteV4(route)}
+	}
+}
+
+func (context *BGPNeighbourContext) GetRouterID(fromConnect chan string) {
 	//TODO: error handling
 	ladr := <-fromConnect
-	toMainContext <- BGPCommand{Cmnd: "NewRouterID", CmndData: ladr}
+	if ladr == "exit" {
+		return
+	}
+	context.NextHop = ladr
+	context.ToMainContext <- BGPCommand{Cmnd: "NewRouterID", CmndData: ladr}
 	//TODO: send ladr to context (so it could be used as next_hop)
 }
 
@@ -295,6 +478,7 @@ func StartBGPNeighbourContext(context *BGPNeighbourContext, passive bool,
 		localSockChans.readChan = sockChans.readChan
 		localSockChans.writeChan = sockChans.writeChan
 		localSockChans.controlChan = sockChans.controlChan
+		context.NextHop = sockChans.localAddr
 	}
 	keepaliveFeedback := make(chan uint8)
 	msgBuf := make([]byte, 0)
@@ -303,7 +487,18 @@ func StartBGPNeighbourContext(context *BGPNeighbourContext, passive bool,
 	context.fsm.DelayOpenTime = 5
 RECONNECT:
 	if !passive {
-		go GetRouterID(localSockChans.controlChan, context.ToMainContext)
+		context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+			Cmnd:         "ActiveStartConnection",
+			ResponseChan: localSockChans.controlChan}
+		/*
+					   we cant rcv resp from ToNeighbourContext chan, in case, when passiveConnection in established state
+			           (it rewrites ToNeighbourContext chan in bgpneighbour struct)
+		*/
+		response := <-localSockChans.controlChan
+		if response == "teardown" {
+			return
+		}
+		go context.GetRouterID(localSockChans.controlChan)
 		err := ConnectToNeighbour(context.NeighbourAddr,
 			localSockChans.fromWriteError,
 			localSockChans.toWriteError,
@@ -314,6 +509,7 @@ RECONNECT:
 
 		if err != nil {
 			if err == CANT_CONNECT_ERROR {
+				localSockChans.controlChan <- "exit"
 				context.fsm.ConnectRetryCounter++
 				//TODO: fsm.ConnectionRetryTime
 				time.Sleep(10 * time.Second)
@@ -353,16 +549,30 @@ RECONNECT:
 			}
 		}
 	}
-	//HACK; FOR POC; GONNA REMOVE IT
 	if !passive {
 		context.ToMainContext <- BGPCommand{From: context.NeighbourAddr, Cmnd: "ActiveConnected"}
+		GenerateOpenMsg(context, localSockChans.writeChan, "OpenSent")
 	}
 	loop = 1
 	for loop == 1 {
 		select {
-		case <-time.After(time.Duration(context.fsm.DelayOpenTime) * time.Second):
-			if context.fsm.State == "Connect" {
-				GenerateOpenMsg(context, localSockChans.writeChan, "OpenSent")
+		case msgFromMainContext := <-context.ToNeighbourContext:
+			if context.fsm.State == "Established" {
+				if msgFromMainContext.Cmnd == "AdvertiseRouteV4" ||
+					msgFromMainContext.Cmnd == "WithdrawRouteV4" {
+					route := msgFromMainContext.Route
+					err := route.AddV4NextHop(context.NextHop)
+					if err != nil {
+						continue
+					}
+
+					data, err := EncodeUpdateMsg(&route)
+					if err != nil {
+						continue
+					}
+
+					localSockChans.writeChan <- data
+				}
 			}
 		case bgpMsg := <-localSockChans.readChan:
 			msgBuf = append(msgBuf, bgpMsg...)
@@ -372,16 +582,17 @@ RECONNECT:
 				}
 				hdr, err := DecodeMsgHeader(msgBuf)
 				if err != nil {
-					//TODO: notification, close socket, nulify buf etc
 					SendNotification(context, "MsgHeaderError", localSockChans,
 						BGP_MSG_HEADER_ERROR, BGP_MH_ERROR_BADTYPE)
 					msgBuf = msgBuf[:0]
+					//TODO: here and bellow: lots of copy-paste. find a better way to deal with
 					if passive {
-						return
+						context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+							Cmnd: "PassiveClossed"}
+						goto PASSIVE_TEARDOWN
 					} else {
 						context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
 							Cmnd: "ActiveClossed"}
-
 						goto RECONNECT
 					}
 				}
@@ -397,11 +608,13 @@ RECONNECT:
 							BGP_OPEN_MSG_ERROR, BGP_GENERIC_ERROR)
 						msgBuf = msgBuf[:0]
 						if passive {
-							return
+							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+								Cmnd: "PassiveClossed"}
+							goto PASSIVE_TEARDOWN
+
 						} else {
 							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
 								Cmnd: "ActiveClossed"}
-
 							goto RECONNECT
 						}
 					}
@@ -430,7 +643,10 @@ RECONNECT:
 								BGP_OPEN_MSG_ERROR, BGP_GENERIC_ERROR)
 							msgBuf = msgBuf[:0]
 							if passive {
-								return
+								context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+									Cmnd: "PassiveClossed"}
+								goto PASSIVE_TEARDOWN
+
 							} else {
 								context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
 									Cmnd: "ActiveClossed"}
@@ -447,8 +663,13 @@ RECONNECT:
 							BGP_FSM_ERROR, BGP_GENERIC_ERROR)
 						msgBuf = msgBuf[:0]
 						if passive {
-							return
+							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+								Cmnd: "PassiveClossed"}
+							goto PASSIVE_TEARDOWN
+
 						} else {
+							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+								Cmnd: "ActiveClossed"}
 							goto RECONNECT
 						}
 					}
@@ -458,24 +679,60 @@ RECONNECT:
 						SendNotification(context, "UpdateError", localSockChans,
 							BGP_UPDATE_MSG_ERROR, BGP_GENERIC_ERROR)
 						msgBuf = msgBuf[:0]
-						goto RECONNECT
+						if passive {
+							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+								Cmnd: "PassiveClossed"}
+							goto PASSIVE_TEARDOWN
+						} else {
+							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+								Cmnd: "ActiveClossed"}
+							goto RECONNECT
+						}
 					}
 					state := context.fsm.Event("Update")
 					if state != "Established" {
-						goto RECONNECT
+						SendNotification(context, "UpdateError", localSockChans,
+							BGP_FSM_ERROR, BGP_GENERIC_ERROR)
+						msgBuf = msgBuf[:0]
+						if passive {
+							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+								Cmnd: "PassiveClossed"}
+							goto PASSIVE_TEARDOWN
+						} else {
+							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+								Cmnd: "ActiveClossed"}
+							goto RECONNECT
+						}
 					}
 					PrintBgpUpdate(&updMsg)
 				case BGP_NOTIFICATION_MSG:
-					CloseSockets(localSockChans)
+					CloseSockets(context, localSockChans)
 					if context.fsm.State == "Established" {
 						keepaliveFeedback <- uint8(1)
 					}
 					msgBuf = msgBuf[:0]
 					context.fsm.Event("Start")
-					goto RECONNECT
+					//TODO: fix hardcode
+					time.Sleep(10 * time.Second)
+					if passive {
+						context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+							Cmnd: "PassiveClossed"}
+						goto PASSIVE_TEARDOWN
+					} else {
+						context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+							Cmnd: "ActiveClossed"}
+						goto RECONNECT
+					}
 				case BGP_KEEPALIVE_MSG:
 					state := context.fsm.Event("Keepalive")
 					if state == "Established" {
+						if passive {
+							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+								Cmnd: "PassiveEstablished"}
+						} else {
+							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+								Cmnd: "Established"}
+						}
 						go SendKeepalive(localSockChans.writeChan,
 							context.fsm.KeepaliveTime,
 							keepaliveFeedback)
@@ -485,6 +742,11 @@ RECONNECT:
 			}
 		}
 	}
+PASSIVE_TEARDOWN:
+	context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+		Cmnd: "PassiveTeardown"}
+	return
+
 }
 
 func SendKeepalive(writeChan chan []byte, sleepTime uint32, feedbackChan chan uint8) {
@@ -538,16 +800,47 @@ func SendNotification(context *BGPNeighbourContext, event string,
 	case <-sockChans.readError:
 	default:
 	}
+	if context.fsm.State == "Established" {
+		/*
+				HACK. trying to protect ourself from deadlock, when main context trying to send something
+			    for us.TODO: to think mb there is a better solution for that
+		*/
+	LOOP:
+		for {
+			select {
+			case <-context.ToNeighbourContext:
+			default:
+				break LOOP
+			}
+		}
+		context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+			Cmnd: "Down"}
+
+	}
 	context.fsm.Event("Start")
 }
 
-func CloseSockets(sockChans SockControlChans) {
+func CloseSockets(context *BGPNeighbourContext, sockChans SockControlChans) {
 	sockChans.toWriteError <- 0
 	//TODO: poc this; proper sync
 	select {
 	case <-sockChans.readError:
 	default:
 	}
+	if context.fsm.State == "Established" {
+	LOOP:
+		for {
+			select {
+			case <-context.ToNeighbourContext:
+			default:
+				break LOOP
+			}
+		}
+		context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+			Cmnd: "Down"}
+
+	}
+
 }
 
 func PerformCollisionCheck(context *BGPNeighbourContext, passive bool, openMsg *OpenMsg) string {

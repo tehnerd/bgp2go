@@ -25,6 +25,7 @@ type SockControlChans struct {
 	readChan       chan []byte
 	writeChan      chan []byte
 	controlChan    chan string
+	localAddr      string
 }
 
 func (sockChans *SockControlChans) Init() {
@@ -107,6 +108,7 @@ func WriteToNeighbour(sock *net.TCPConn, writeChan chan []byte,
 	   however we could initate closing as well (for example error in msg parsing)
 	   it both cases(closing a working connection, or clossing a clossed) that shouldnt be a problem.
 	*/
+
 	sock.Close()
 }
 
@@ -149,6 +151,7 @@ func ProcessPeerConection(sock *net.TCPConn, toMainContext chan BGPCommand) {
 	}
 	ladr := strings.Split(sock.LocalAddr().String(), ":")[0]
 	toMainContext <- BGPCommand{Cmnd: "NewRouterID", CmndData: ladr}
+	sockChans.localAddr = ladr
 	go ReadFromNeighbour(sock, sockChans.readChan, sockChans.readError)
 	go WriteToNeighbour(sock, sockChans.writeChan, sockChans.fromWriteError,
 		sockChans.toWriteError)
