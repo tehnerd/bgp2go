@@ -706,23 +706,7 @@ RECONNECT:
 					}
 					PrintBgpUpdate(&updMsg)
 				case BGP_NOTIFICATION_MSG:
-					CloseSockets(context, localSockChans)
-					if context.fsm.State == "Established" {
-						keepaliveFeedback <- uint8(1)
-					}
-					msgBuf = msgBuf[:0]
-					context.fsm.Event("Start")
-					//TODO: fix hardcode
-					time.Sleep(10 * time.Second)
-					if passive {
-						context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
-							Cmnd: "PassiveClossed"}
-						goto PASSIVE_TEARDOWN
-					} else {
-						context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
-							Cmnd: "ActiveClossed"}
-						goto RECONNECT
-					}
+					goto CLOSE_CONNECTION
 				case BGP_KEEPALIVE_MSG:
 					state := context.fsm.Event("Keepalive")
 					if state == "Established" {
@@ -740,8 +724,32 @@ RECONNECT:
 				}
 				msgBuf = msgBuf[hdr.Length:]
 			}
+		case <-localSockChans.readError:
+			goto CLOSE_CONNECTION
+		case <-localSockChans.toWriteError:
+			goto CLOSE_CONNECTION
 		}
 	}
+
+CLOSE_CONNECTION:
+	CloseSockets(context, localSockChans)
+	if context.fsm.State == "Established" {
+		keepaliveFeedback <- uint8(1)
+	}
+	msgBuf = msgBuf[:0]
+	context.fsm.Event("Start")
+	if passive {
+		context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+			Cmnd: "PassiveClossed"}
+		goto PASSIVE_TEARDOWN
+	} else {
+		context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+			Cmnd: "ActiveClossed"}
+		//TODO: fix hardcode
+		time.Sleep(10 * time.Second)
+		goto RECONNECT
+	}
+
 PASSIVE_TEARDOWN:
 	context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
 		Cmnd: "PassiveTeardown"}
