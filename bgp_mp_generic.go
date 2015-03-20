@@ -21,7 +21,7 @@ type MP_REACH_NLRI_HDR struct {
 		afi/safi/nhlen and reserved)
 	*/
 	//RESERVED uint8 (ONE_OCTET)
-	//MP-NRLI variable length
+	//MP_NRLI variable length
 }
 
 type MP_UNREACH_NLRI_HDR struct {

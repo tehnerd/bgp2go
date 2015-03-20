@@ -66,9 +66,42 @@ func TestDecodeOpenMsg(t *testing.T) {
 				}
 				fmt.Println(capability)
 				fmt.Println(data)
+				if capability.Code == CAPABILITY_MP_EXTENSION {
+					mpCap, err := DecodeMPCapability(data)
+					if err != nil {
+						t.Errorf("error during capability decoding\n")
+					}
+					fmt.Printf("mp capability: %#v\n", mpCap)
+				}
 			}
 			encodedOpen = encodedOpen[TWO_OCTETS+optParamHdr.ParamLength:]
 		}
+	}
+}
+
+func TestEncodeMPcapability(t *testing.T) {
+	mpCap := MPCapability{AFI: 1, SAFI: 1}
+	encMpCap, err := EncodeMPCapability(mpCap)
+	if err != nil {
+		t.Errorf("cant encode mpCap")
+	}
+	encCap, err := EncodeCapability(Capability{Code: CAPABILITY_MP_EXTENSION}, encMpCap)
+	if err != nil {
+		t.Errorf("cant encode capability")
+	}
+	capability, data, err := DecodeCapability(encCap)
+	if capability.Code != CAPABILITY_MP_EXTENSION {
+		t.Errorf("error during capability decoding")
+	}
+	if err != nil {
+		t.Errorf("can decode encoded capability")
+	}
+	decMpCap, err := DecodeMPCapability(data)
+	if err != nil {
+		t.Errorf("cant decode encoded mp capability")
+	}
+	if decMpCap.AFI != mpCap.AFI || decMpCap.SAFI != mpCap.SAFI {
+		t.Errorf("error during enc/dec of mp cap")
 	}
 }
 
