@@ -558,8 +558,12 @@ RECONNECT:
 		select {
 		case msgFromMainContext := <-context.ToNeighbourContext:
 			if context.fsm.State == "Established" {
-				if msgFromMainContext.Cmnd == "AdvertiseRouteV4" ||
-					msgFromMainContext.Cmnd == "WithdrawRouteV4" {
+				/*
+					 it's more practical from implementation point of view
+						not to mix advertise and withdraw routes
+						into the same update
+				*/
+				if msgFromMainContext.Cmnd == "AdvertiseRouteV4" {
 					route := msgFromMainContext.Route
 					err := route.AddV4NextHop(context.NextHop)
 					if err != nil {
@@ -572,7 +576,16 @@ RECONNECT:
 					}
 
 					localSockChans.writeChan <- data
+				} else if msgFromMainContext.Cmnd == "WithdrawRouteV4" {
+					route := msgFromMainContext.Route
+					data, err := EncodeWithdrawUpdateMsg(&route)
+					if err != nil {
+						continue
+					}
+
+					localSockChans.writeChan <- data
 				}
+
 			}
 		case bgpMsg := <-localSockChans.readChan:
 			msgBuf = append(msgBuf, bgpMsg...)

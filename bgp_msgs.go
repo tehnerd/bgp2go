@@ -12,10 +12,14 @@ const (
 	//Misc const
 	MAX_MSG_SIZE      = 4096
 	MSG_HDR_SIZE      = 19
+	MIN_OPEN_MSG_SIZE = 29
 	ONE_OCTET_SHIFT   = 1
 	TWO_OCTET_SHIFT   = 2
 	THREE_OCTET_SHIFT = 3
 	FOUR_OCTET_SHIFT  = 4
+	ONE_OCTET         = 1
+	TWO_OCTETS        = 2
+	FOUR_OCTETS       = 4
 
 	// BGP's msg's types
 	BGP_OPEN_MSG         = 1
@@ -193,13 +197,19 @@ func EncodeOpenMsg(openMsg *OpenMsg) ([]byte, error) {
 	return encodedOpen, nil
 }
 
-func DecodeOptionalParamHeader(msg []byte) (OptionalParamHeader, error) {
+func DecodeOptionalParamHeader(msg []byte) (OptionalParamHeader, []byte, error) {
 	optParamHdr := OptionalParamHeader{}
+	if len(msg) < TWO_OCTETS {
+		return optParamHdr, nil, fmt.Errorf("opt param len is not enough for decoding\n")
+	}
 	err := binary.Read(bytes.NewReader(msg), binary.BigEndian, &optParamHdr)
 	if err != nil {
-		return optParamHdr, errors.New("cant decode optional param header")
+		return optParamHdr, nil, fmt.Errorf("cant decode optional param header: %v\n", err)
 	}
-	return optParamHdr, nil
+	if len(msg) < (TWO_OCTETS + int(optParamHdr.ParamLength)) {
+		return optParamHdr, nil, fmt.Errorf("opt param len is not enough for decoding\n")
+	}
+	return optParamHdr, msg[TWO_OCTETS : TWO_OCTETS+optParamHdr.ParamLength], nil
 
 }
 
@@ -364,11 +374,7 @@ func DecodeV4NextHop(bgpRoute *BGPRoute) (uint32, error) {
 func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 	encodedUpdate := make([]byte, 0)
 	buf := new(bytes.Buffer)
-	encodedWithdrawRoutes, err := EncodeIPv4Route(bgpRoute.WithdrawRoutes)
-	if err != nil {
-		return nil, fmt.Errorf("cant encode withdraw routes")
-	}
-	updMsgLen := UpdateMsgLengths{WithdrawRoutesLength: uint16(len(encodedWithdrawRoutes))}
+	updMsgLen := UpdateMsgLengths{}
 	if len(bgpRoute.NEXT_HOP) == 0 {
 		return nil, fmt.Errorf("no mandatory attr(next-hop) in bgp update\n")
 	}
@@ -386,7 +392,6 @@ func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 		return nil, fmt.Errorf("cant encode withdar routes length\n")
 	}
 	encodedUpdate = append(encodedUpdate, buf.Bytes()...)
-	encodedUpdate = append(encodedUpdate, encodedWithdrawRoutes...)
 	err = binary.Write(buf, binary.BigEndian, &updMsgLen.TotalPathAttrsLength)
 	if err != nil {
 		return nil, fmt.Errorf("cant encode total path attrs length\n")
@@ -394,6 +399,35 @@ func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 	encodedUpdate = append(encodedUpdate, buf.Bytes()[TWO_OCTET_SHIFT:]...)
 	encodedUpdate = append(encodedUpdate, encodedAttrs...)
 	encodedUpdate = append(encodedUpdate, encodedRoutes...)
+	msgHdr := MsgHeader{Type: BGP_UPDATE_MSG, Length: MSG_HDR_SIZE + uint16(len(encodedUpdate))}
+	encMsgHdr, err := EncodeMsgHeader(&msgHdr)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode update msg hdr: %v\n", err)
+	}
+	encodedUpdate = append(encMsgHdr, encodedUpdate...)
+	return encodedUpdate, nil
+}
+
+//TODO: mp_unreach caries withdraw routes in path_attr
+func EncodeWithdrawUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
+	encodedUpdate := make([]byte, 0)
+	buf := new(bytes.Buffer)
+	encodedWithdrawRoutes, err := EncodeIPv4Route(bgpRoute.WithdrawRoutes)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode withdraw routes")
+	}
+	updMsgLen := UpdateMsgLengths{WithdrawRoutesLength: uint16(len(encodedWithdrawRoutes))}
+	err = binary.Write(buf, binary.BigEndian, &updMsgLen.WithdrawRoutesLength)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode withdar routes length\n")
+	}
+	encodedUpdate = append(encodedUpdate, buf.Bytes()...)
+	encodedUpdate = append(encodedUpdate, encodedWithdrawRoutes...)
+	err = binary.Write(buf, binary.BigEndian, &updMsgLen.TotalPathAttrsLength)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode total path attrs length\n")
+	}
+	encodedUpdate = append(encodedUpdate, buf.Bytes()[TWO_OCTET_SHIFT:]...)
 	msgHdr := MsgHeader{Type: BGP_UPDATE_MSG, Length: MSG_HDR_SIZE + uint16(len(encodedUpdate))}
 	encMsgHdr, err := EncodeMsgHeader(&msgHdr)
 	if err != nil {

@@ -18,12 +18,11 @@ const (
 
 func TestDecodeMsgHeader(t *testing.T) {
 	encodedOpen, _ := hex.DecodeString(hexOpenMsg)
-	msgHdr, err := DecodeMsgHeader(encodedOpen)
+	_, err := DecodeMsgHeader(encodedOpen)
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during bgp msg header decoding")
 	}
-	fmt.Printf("%v %v %v\n", msgHdr.Marker, msgHdr.Length, msgHdr.Type)
 }
 
 func TestEncodeMsgHeader(t *testing.T) {
@@ -53,18 +52,23 @@ func TestDecodeOpenMsg(t *testing.T) {
 		fmt.Println(err)
 		t.Errorf("error during open msg decoding")
 	}
-	fmt.Println(openMsg)
-	fmt.Println(len(encodedOpen))
-	offsetPntr := 29 //MsgHdr+OpenMsg length
-	for offsetPntr < int(openMsg.OptParamLength)+29 {
-		optParamHdr, err := DecodeOptionalParamHeader(encodedOpen[offsetPntr:])
-		if err != nil {
-			fmt.Println(err)
-			t.Errorf("error during optional msg decoding")
+	if openMsg.OptParamLength > 0 {
+		encodedOpen = encodedOpen[MIN_OPEN_MSG_SIZE:]
+		for len(encodedOpen) != 0 {
+			optParamHdr, optParam, err := DecodeOptionalParamHeader(encodedOpen)
+			if err != nil {
+				t.Errorf("error in open msg decoding\n")
+			}
+			if optParamHdr.ParamType == CAPABILITIES_OPTIONAL_PARAM {
+				capability, data, err := DecodeCapability(optParam)
+				if err != nil {
+					t.Errorf("cant decode capability\n")
+				}
+				fmt.Println(capability)
+				fmt.Println(data)
+			}
+			encodedOpen = encodedOpen[TWO_OCTETS+optParamHdr.ParamLength:]
 		}
-		fmt.Println(optParamHdr)
-		fmt.Println(encodedOpen[offsetPntr+2 : offsetPntr+2+int(optParamHdr.ParamLength)])
-		offsetPntr += (int(optParamHdr.ParamLength) + 2)
 	}
 }
 
@@ -85,19 +89,19 @@ func TestEncodeOpenMsg(t *testing.T) {
 
 func TestDecodeUpdateMsg(t *testing.T) {
 	encodedUpdate, _ := hex.DecodeString(hexUpdate1)
-	bgpRoute, err := DecodeUpdateMsg(encodedUpdate)
+	_, err := DecodeUpdateMsg(encodedUpdate)
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during update  msg decoding")
 	}
-	PrintBgpUpdate(&bgpRoute)
+	//PrintBgpUpdate(&bgpRoute)
 	encodedUpdate, _ = hex.DecodeString(hexUpdate2)
-	bgpRoute, err = DecodeUpdateMsg(encodedUpdate)
+	_, err = DecodeUpdateMsg(encodedUpdate)
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during update  msg decoding")
 	}
-	PrintBgpUpdate(&bgpRoute)
+	//PrintBgpUpdate(&bgpRoute)
 }
 
 /*
@@ -107,12 +111,12 @@ func TestDecodeUpdateMsg(t *testing.T) {
 
 func TestDecodeUpdMsgWithAsPath(t *testing.T) {
 	encodedUpdate, _ := hex.DecodeString(hexUpdate4)
-	bgpRoute, err := DecodeUpdateMsg(encodedUpdate)
+	_, err := DecodeUpdateMsg(encodedUpdate)
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during update  msg decoding")
 	}
-	PrintBgpUpdate(&bgpRoute)
+	//PrintBgpUpdate(&bgpRoute)
 
 }
 
@@ -132,7 +136,6 @@ func TestDecodeNotificationMsg(t *testing.T) {
 	if err != nil {
 		t.Errorf("error during notification decoding")
 	}
-	fmt.Println(notification)
 	if notification.ErrorCode != 6 && notification.ErrorSubcode != 7 {
 		t.Errorf("error during notification decoding(code and subcode are not equal to etalon)")
 	}
@@ -164,11 +167,9 @@ func TestEncodeUpdateMsg1(t *testing.T) {
 	p1, _ := IPv4ToUint32("1.92.0.0")
 	p2, _ := IPv4ToUint32("11.92.128.0")
 	p3, _ := IPv4ToUint32("1.1.1.10")
-	p4, _ := IPv4ToUint32("192.168.0.0")
 	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 12, Prefix: p1})
 	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 22, Prefix: p2})
 	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 32, Prefix: p3})
-	bgpRoute.WithdrawRoutes = append(bgpRoute.WithdrawRoutes, IPV4_NLRI{Length: 16, Prefix: p4})
 	err := bgpRoute.AddV4NextHop("10.0.0.2")
 	if err != nil {
 		fmt.Println(err)
@@ -194,13 +195,32 @@ func TestEncodeUpdateMsg1(t *testing.T) {
 			break
 		}
 	}
-	fmt.Println(len(data))
-	fmt.Println(bgpRoute)
-	fmt.Println("########################")
-	fmt.Println(bgpRoute2)
-	PrintBgpUpdate(&bgpRoute2)
-	ipv4, _ := DecodeV4NextHop(&bgpRoute2)
-	fmt.Println(Uint32IPv4ToString(ipv4))
+}
+
+func TestEncodeWithdrawUpdateMsg1(t *testing.T) {
+	bgpRoute := BGPRoute{}
+	p4, _ := IPv4ToUint32("192.168.0.0")
+	bgpRoute.WithdrawRoutes = append(bgpRoute.WithdrawRoutes, IPV4_NLRI{Length: 16, Prefix: p4})
+	data, err := EncodeWithdrawUpdateMsg(&bgpRoute)
+	if err != nil {
+		fmt.Println(err)
+		t.Errorf("cant encode withdraw update msg")
+	}
+	bgpRoute2, err := DecodeUpdateMsg(data)
+	if err != nil {
+		fmt.Println(err)
+		t.Errorf("cant decode withdraw encoded update")
+	}
+	data2, _ := EncodeWithdrawUpdateMsg(&bgpRoute2)
+	if len(data) != len(data2) {
+		t.Errorf("error in encoding/decoding of the same withdraw msg")
+	}
+	for cntr := 0; cntr < len(data); cntr++ {
+		if data[cntr] != data2[cntr] {
+			t.Errorf("error in encoding/decoding of the same withdraw msg")
+			break
+		}
+	}
 }
 
 func TestEncodeEndOfRIB(t *testing.T) {
