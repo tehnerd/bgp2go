@@ -151,6 +151,15 @@ func EncodeBGPRouteAttrs(bgpRoute *BGPRoute) ([]byte, error) {
 		encodedAttrs = append(encodedAttrs, data...)
 
 	}
+	if len(bgpRoute.RoutesV6) != 0 {
+		for _, route := range bgpRoute.RoutesV6 {
+			data, err = EncodeV6MPRNRLI(bgpRoute.NEXT_HOPv6, route, &pathAttr)
+			if err != nil {
+				return nil, err
+			}
+			encodedAttrs = append(encodedAttrs, data...)
+		}
+	}
 
 	return encodedAttrs, nil
 }
@@ -253,6 +262,25 @@ func EncodeNextHopAttr(nh []byte, pathAttr *PathAttr) ([]byte, error) {
 	}
 	return encodedAttr, nil
 }
+
+func EncodeV6MPRNRLI(nh IPv6Addr, nlri IPV6_NLRI, pathAttr *PathAttr) ([]byte, error) {
+	pathAttr.AttrFlags = BAF_OPTIONAL
+	pathAttr.AttrTypeCode = BA_MP_REACH_NLRI
+	encData, err := EncodeIPV6_MP_REACH_NLRI(nh, nlri)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
+	}
+	pathAttr.ExtendedLength = true
+	pathAttr.AttrFlags |= BAF_EXT_LEN
+	encodedAttr, err := EncodePathAttr(pathAttr, encData)
+	if err != nil {
+		return nil, fmt.Errorf("error during ORIGIN attr encoding: %v\n", err)
+	}
+	return encodedAttr, nil
+}
+
+/*
+
 
 /*
 TODO: lots of things must be implemented.(for example as_path can has more than one

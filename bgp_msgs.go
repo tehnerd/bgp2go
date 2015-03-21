@@ -136,14 +136,18 @@ type IPV4_NLRI struct {
 type BGPRoute struct {
 	ORIGIN uint8
 	//TODO: could be more that 1 path segment
-	AS_PATH         PathSegment
-	NEXT_HOP        []byte
-	MULTI_EXIT_DISC uint32
-	LOCAL_PREF      uint32
-	ATOMIC_AGGR     bool
-	AGGREGATOR      Agregator
-	Routes          []IPV4_NLRI
-	WithdrawRoutes  []IPV4_NLRI
+	AS_PATH  PathSegment
+	NEXT_HOP []byte
+	//TODO: mb it's better to use generic nh([]byte; above)
+	NEXT_HOPv6       IPv6Addr
+	MULTI_EXIT_DISC  uint32
+	LOCAL_PREF       uint32
+	ATOMIC_AGGR      bool
+	AGGREGATOR       Agregator
+	Routes           []IPV4_NLRI
+	RoutesV6         []IPV6_NLRI
+	WithdrawRoutes   []IPV4_NLRI
+	WithdrawRoutesV6 []IPV6_NLRI
 }
 
 func DecodeMsgHeader(msg []byte) (MsgHeader, error) {

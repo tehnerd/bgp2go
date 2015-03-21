@@ -7,13 +7,16 @@ import (
 )
 
 const (
-	hexOpenMsg      = "ffffffffffffffffffffffffffffffff003b0104fde8005a0a0000021e02060104000100010202800002020200020440020078020641040000fde8"
-	hexUpdate1      = "ffffffffffffffffffffffffffffffff00360200000015400101004002004003040a0000024005040000006420010101012001010102"
-	hexUpdate2      = "ffffffffffffffffffffffffffffffff0038020000001c400101004002004003040a00000280040400000078400504000000642001010103"
-	hexUpdate3      = "ffffffffffffffffffffffffffffffff00170200000000"
-	hexUpdate4      = "ffffffffffffffffffffffffffffffff005102000000364001010240021a02060000000100000002000000030000000400000005000000064003040a00000240050400000064c00804ffff000118010b01"
-	hexKA           = "ffffffffffffffffffffffffffffffff001304"
-	hexNotification = "ffffffffffffffffffffffffffffffff0015030607"
+	hexOpenMsg               = "ffffffffffffffffffffffffffffffff003b0104fde8005a0a0000021e02060104000100010202800002020200020440020078020641040000fde8"
+	hexUpdate1               = "ffffffffffffffffffffffffffffffff00360200000015400101004002004003040a0000024005040000006420010101012001010102"
+	hexUpdate2               = "ffffffffffffffffffffffffffffffff0038020000001c400101004002004003040a00000280040400000078400504000000642001010103"
+	hexUpdate3               = "ffffffffffffffffffffffffffffffff00170200000000"
+	hexUpdate4               = "ffffffffffffffffffffffffffffffff005102000000364001010240021a02060000000100000002000000030000000400000005000000064003040a00000240050400000064c00804ffff000118010b01"
+	hexKA                    = "ffffffffffffffffffffffffffffffff001304"
+	hexNotification          = "ffffffffffffffffffffffffffffffff0015030607"
+	hexIPv6NLRI              = "302a00bdc0e003"
+	hexIPv6_MP_REACH         = "00020110200107f800200101000000000245018000302a00bdc0e003"
+	hexIPv6_MP_REACH_NLRI_PA = "900e001c00020110200107f800200101000000000245018000302a00bdc0e003"
 )
 
 func TestDecodeMsgHeader(t *testing.T) {
@@ -261,5 +264,115 @@ func TestEncodeEndOfRIB(t *testing.T) {
 	if len(eor) != 23 {
 		fmt.Println(eor)
 		t.Errorf("error during EndOfRib marker generation")
+	}
+}
+
+func TestIPv6StringToUint(t *testing.T) {
+	_, err := IPv6StringToAddr("::")
+	if err != nil {
+		t.Errorf("cant convert ipv6 to ipv6addr\n")
+	}
+	addr, err := IPv6StringToAddr("fc1:2:3::1")
+	if err != nil {
+		t.Errorf("cant convert ipv6 to ipv6addr\n")
+	}
+	ipv6 := IPv6AddrToString(addr)
+	fmt.Println(ipv6)
+}
+
+func TestIPv6NLRIEncoding(t *testing.T) {
+	encodedIPv6NLRI, _ := hex.DecodeString(hexIPv6NLRI)
+	nlri := IPV6_NLRI{Length: 48}
+	v6addr, err := IPv6StringToAddr("2a00:bdc0:e003::")
+	if err != nil {
+		t.Errorf("error during ipv6 addr converting: %v\n", err)
+	}
+	nlri.Prefix = v6addr
+	encIPv6NLRI, err := EncodeIPv6NLRI(nlri)
+	if err != nil {
+		t.Errorf("cant encode ipv6 nlri: %v\n", err)
+	}
+	fmt.Println(encodedIPv6NLRI)
+	fmt.Println(encIPv6NLRI)
+	if len(encodedIPv6NLRI) != len(encIPv6NLRI) {
+		t.Errorf("len of encoded ipv6 nlri is not equal to len of etalon\n")
+	}
+	for i := 0; i < len(encIPv6NLRI); i++ {
+		if encIPv6NLRI[i] != encodedIPv6NLRI[i] {
+			t.Errorf("encoded ipv6 nlri is not equal to etalon")
+		}
+	}
+}
+
+func TestIPv6MP_REACH_Encoding(t *testing.T) {
+	encodedIPv6MPREACH, _ := hex.DecodeString(hexIPv6_MP_REACH)
+	nlri := IPV6_NLRI{Length: 48}
+	v6addr, _ := IPv6StringToAddr("2a00:bdc0:e003::")
+	v6nh, _ := IPv6StringToAddr("2001:7f8:20:101::245:180")
+	nlri.Prefix = v6addr
+	encIPv6MPREACH, err := EncodeIPV6_MP_REACH_NLRI(v6nh, nlri)
+	if err != nil {
+		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
+	}
+	if len(encodedIPv6MPREACH) != len(encIPv6MPREACH) {
+		t.Errorf("len of encoded ipv6  mp reach nlri is not equal to len of etalon\n")
+	}
+	for i := 0; i < len(encIPv6MPREACH); i++ {
+		if encIPv6MPREACH[i] != encodedIPv6MPREACH[i] {
+			t.Errorf("encoded ipv6 mp reach nlri is not equal to etalon")
+		}
+	}
+}
+
+func TestIPv6MP_REACH_PathAttrEncoding(t *testing.T) {
+	encodedIPv6MPREACHPA, _ := hex.DecodeString(hexIPv6_MP_REACH_NLRI_PA)
+	nlri := IPV6_NLRI{Length: 48}
+	v6addr, _ := IPv6StringToAddr("2a00:bdc0:e003::")
+	v6nh, _ := IPv6StringToAddr("2001:7f8:20:101::245:180")
+	nlri.Prefix = v6addr
+	pa := PathAttr{}
+	encIPv6MPREACHPA, err := EncodeV6MPRNRLI(v6nh, nlri, &pa)
+	if err != nil {
+		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
+	}
+	if len(encodedIPv6MPREACHPA) != len(encIPv6MPREACHPA) {
+		t.Errorf("len of encoded ipv6  mp reach nlri is not equal to len of etalon\n")
+	}
+	for i := 0; i < len(encIPv6MPREACHPA); i++ {
+		if encIPv6MPREACHPA[i] != encodedIPv6MPREACHPA[i] {
+			fmt.Println(encodedIPv6MPREACHPA)
+			fmt.Println(encIPv6MPREACHPA)
+			t.Errorf("encoded ipv6 mp reach nlri is not equal to etalon")
+		}
+	}
+}
+
+//Benchmarking
+
+func BenchmarkDecodeUpdMsgWithAsPath(b *testing.B) {
+	encodedUpdate, _ := hex.DecodeString(hexUpdate4)
+	for i := 0; i < b.N; i++ {
+		DecodeUpdateMsg(encodedUpdate)
+	}
+	//PrintBgpUpdate(&bgpRoute)
+
+}
+
+func BenchmarkEncodeUpdateMsg1(b *testing.B) {
+	bgpRoute := BGPRoute{
+		ORIGIN:          ORIGIN_IGP,
+		MULTI_EXIT_DISC: uint32(123),
+		LOCAL_PREF:      uint32(11),
+		ATOMIC_AGGR:     true,
+	}
+	p1, _ := IPv4ToUint32("1.92.0.0")
+	p2, _ := IPv4ToUint32("11.92.128.0")
+	p3, _ := IPv4ToUint32("1.1.1.10")
+	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 12, Prefix: p1})
+	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 22, Prefix: p2})
+	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 32, Prefix: p3})
+	bgpRoute.AddV4NextHop("10.0.0.2")
+	for i := 0; i < b.N; i++ {
+		EncodeUpdateMsg(&bgpRoute)
 	}
 }

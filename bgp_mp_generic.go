@@ -1,6 +1,9 @@
 package bgp
 
 const (
+	MP_AFI_IPV4   = 1
+	MP_AFI_IPV6   = 2
+	MP_AFI_VPLS   = 25
 	MP_SAFI_UCAST = 1
 	MP_SAFI_MCAST = 2
 )
@@ -28,9 +31,4 @@ type MP_UNREACH_NLRI_HDR struct {
 	AFI  uint16
 	SAFI uint8
 	//WithdrawRoutes
-}
-
-type MPNRLI_HDR struct {
-	Length uint8
-	//Prefix variable length
 }
