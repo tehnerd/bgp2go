@@ -23,9 +23,9 @@ type Capability struct {
 
 //Multiprotocol Extension
 type MPCapability struct {
-	AFI      uint16
-	Reserved uint8
-	SAFI     uint8
+	AFI  uint16
+	_    uint8
+	SAFI uint8
 }
 
 func DecodeCapability(msg []byte) (Capability, []byte, error) {

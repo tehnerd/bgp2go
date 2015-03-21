@@ -648,8 +648,8 @@ RECONNECT:
 					}
 					switch state {
 					case "OpenKA":
-						context.fsm.KeepaliveTime = uint32(openMsg.HoldTime / 3)
-						context.fsm.HoldTime = uint32(openMsg.HoldTime)
+						context.fsm.KeepaliveTime = uint32(openMsg.Hdr.HoldTime / 3)
+						context.fsm.HoldTime = uint32(openMsg.Hdr.HoldTime)
 						err := GenerateOpenMsg(context, localSockChans.writeChan, "")
 						if err != nil {
 							SendNotification(context, "OpenSendError", localSockChans,
@@ -792,8 +792,8 @@ func SendKeepalive(writeChan chan []byte, sleepTime uint32, feedbackChan chan ui
 
 func GenerateOpenMsg(context *BGPNeighbourContext, writeChan chan []byte,
 	event string) error {
-	openMsg := OpenMsg{Version: uint8(4), MyASN: uint16(context.ASN),
-		BGPID: context.RouterID, HoldTime: uint16(context.fsm.HoldTime)}
+	openMsg := OpenMsg{Hdr: OpenMsgHdr{Version: uint8(4), MyASN: uint16(context.ASN),
+		BGPID: context.RouterID, HoldTime: uint16(context.fsm.HoldTime)}}
 	encodedOpen, err := EncodeOpenMsg(&openMsg)
 	if err != nil {
 		return err
@@ -874,7 +874,7 @@ func PerformCollisionCheck(context *BGPNeighbourContext, passive bool, openMsg *
 	if response.Cmnd == "NoCollision" {
 		return response.Cmnd
 	}
-	if context.RouterID < openMsg.BGPID {
+	if context.RouterID < openMsg.Hdr.BGPID {
 		if !passive {
 			return "teardown"
 		} else {

@@ -13,6 +13,7 @@ const (
 	MAX_MSG_SIZE      = 4096
 	MSG_HDR_SIZE      = 19
 	MIN_OPEN_MSG_SIZE = 29
+	OPEN_MSG_HDR_SIZE = 10
 	ONE_OCTET_SHIFT   = 1
 	TWO_OCTET_SHIFT   = 2
 	THREE_OCTET_SHIFT = 3
@@ -81,6 +82,10 @@ type MsgHeader struct {
 }
 
 type OpenMsg struct {
+	Hdr    OpenMsgHdr
+	MPCaps []MPCapability
+}
+type OpenMsgHdr struct {
 	Version        uint8
 	MyASN          uint16
 	HoldTime       uint16
@@ -178,26 +183,70 @@ func EncodeMsgHeader(msgHeader *MsgHeader) ([]byte, error) {
 
 func DecodeOpenMsg(msg []byte) (OpenMsg, error) {
 	openMsg := OpenMsg{}
-	err := binary.Read(bytes.NewReader(msg), binary.BigEndian, &openMsg)
+	err := binary.Read(bytes.NewReader(msg), binary.BigEndian, &openMsg.Hdr)
 	if err != nil {
 		return openMsg, errors.New("cant decode open msg")
+	}
+	if openMsg.Hdr.OptParamLength > 0 {
+		msg = msg[OPEN_MSG_HDR_SIZE:]
+		for len(msg) > 0 {
+			optParamHdr, optParam, err := DecodeOptionalParamHeader(msg)
+			if err != nil {
+				return openMsg, fmt.Errorf("cant decode opt param hdr: %v\n", err)
+			}
+			msg = msg[TWO_OCTETS+optParamHdr.ParamLength:]
+			if optParamHdr.ParamType == CAPABILITIES_OPTIONAL_PARAM {
+				capHdr, capability, err := DecodeCapability(optParam)
+				if err != nil {
+					return openMsg, fmt.Errorf("cant decode capability hdr: %v\n", err)
+				}
+				if capHdr.Code == CAPABILITY_MP_EXTENSION {
+					mpCap, err := DecodeMPCapability(capability)
+					if err != nil {
+						return openMsg, fmt.Errorf("cant decode mp capability: %v\n", err)
+					}
+					openMsg.MPCaps = append(openMsg.MPCaps, mpCap)
+				}
+			}
+		}
 	}
 	return openMsg, nil
 }
 
 func EncodeOpenMsg(openMsg *OpenMsg) ([]byte, error) {
 	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.BigEndian, openMsg)
+	encodedOptParams := make([]byte, 0)
+	for _, mpCap := range openMsg.MPCaps {
+		encMPCap, err := EncodeMPCapability(mpCap)
+		if err != nil {
+			return nil, fmt.Errorf("cant encode mp cap: %v\n", err)
+		}
+		encCap, err := EncodeCapability(Capability{Code: CAPABILITY_MP_EXTENSION},
+			encMPCap)
+		if err != nil {
+			return nil, fmt.Errorf("cant encode capability: %v\n", err)
+		}
+		encParamHdr, err := EncodeOptionalParamHeader(OptionalParamHeader{
+			ParamType:   CAPABILITIES_OPTIONAL_PARAM,
+			ParamLength: uint8(len(encCap)),
+		})
+		encodedOptParams = append(encodedOptParams, encParamHdr...)
+		encodedOptParams = append(encodedOptParams, encCap...)
+	}
+	openMsg.Hdr.OptParamLength = uint8(len(encodedOptParams))
+	err := binary.Write(buf, binary.BigEndian, openMsg.Hdr)
 	if err != nil {
 		return nil, errors.New("cant encode open msg")
 	}
 	encodedOpen := buf.Bytes()
-	msgHdr := MsgHeader{Type: BGP_OPEN_MSG, Length: MSG_HDR_SIZE + uint16(len(encodedOpen))}
+	msgHdr := MsgHeader{Type: BGP_OPEN_MSG, Length: MIN_OPEN_MSG_SIZE +
+		uint16(openMsg.Hdr.OptParamLength)}
 	encodedHdr, err := EncodeMsgHeader(&msgHdr)
 	if err != nil {
 		return nil, fmt.Errorf("cant encode open msg: %v\n", err)
 	}
 	encodedOpen = append(encodedHdr, encodedOpen...)
+	encodedOpen = append(encodedOpen, encodedOptParams...)
 	return encodedOpen, nil
 }
 
@@ -215,6 +264,15 @@ func DecodeOptionalParamHeader(msg []byte) (OptionalParamHeader, []byte, error) 
 	}
 	return optParamHdr, msg[TWO_OCTETS : TWO_OCTETS+optParamHdr.ParamLength], nil
 
+}
+
+func EncodeOptionalParamHeader(optParamHdr OptionalParamHeader) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.BigEndian, optParamHdr)
+	if err != nil {
+		return nil, errors.New("cant encode optional param header")
+	}
+	return buf.Bytes(), nil
 }
 
 func AddAttrToRoute(bgpRoute *BGPRoute, pathAttr *PathAttr) error {
@@ -262,15 +320,6 @@ func AddAttrToRoute(bgpRoute *BGPRoute, pathAttr *PathAttr) error {
 		}
 	}
 	return nil
-}
-
-func EncodeOptionalParamHeader(optParamHdr *OptionalParamHeader) ([]byte, error) {
-	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.BigEndian, optParamHdr)
-	if err != nil {
-		return nil, errors.New("cant encode optional param header")
-	}
-	return buf.Bytes(), nil
 }
 
 //will incremently add features; update msg, compare to other ones, has lots of variable length fields
