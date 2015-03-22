@@ -153,7 +153,7 @@ func EncodeBGPRouteAttrs(bgpRoute *BGPRoute) ([]byte, error) {
 	}
 	if len(bgpRoute.RoutesV6) != 0 {
 		for _, route := range bgpRoute.RoutesV6 {
-			data, err = EncodeV6MPRNRLI(bgpRoute.NEXT_HOPv6, route, &pathAttr)
+			data, err = EncodeV6MPRNLRI(bgpRoute.NEXT_HOPv6, route, &pathAttr)
 			if err != nil {
 				return nil, err
 			}
@@ -263,7 +263,7 @@ func EncodeNextHopAttr(nh []byte, pathAttr *PathAttr) ([]byte, error) {
 	return encodedAttr, nil
 }
 
-func EncodeV6MPRNRLI(nh IPv6Addr, nlri IPV6_NLRI, pathAttr *PathAttr) ([]byte, error) {
+func EncodeV6MPRNLRI(nh IPv6Addr, nlri IPV6_NLRI, pathAttr *PathAttr) ([]byte, error) {
 	pathAttr.AttrFlags = BAF_OPTIONAL
 	pathAttr.AttrTypeCode = BA_MP_REACH_NLRI
 	encData, err := EncodeIPV6_MP_REACH_NLRI(nh, nlri)

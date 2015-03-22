@@ -325,7 +325,7 @@ func TestIPv6MP_REACH_PathAttrEncoding(t *testing.T) {
 	v6nh, _ := IPv6StringToAddr("2001:7f8:20:101::245:180")
 	nlri.Prefix = v6addr
 	pa := PathAttr{}
-	encIPv6MPREACHPA, err := EncodeV6MPRNRLI(v6nh, nlri, &pa)
+	encIPv6MPREACHPA, err := EncodeV6MPRNLRI(v6nh, nlri, &pa)
 	if err != nil {
 		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
 	}
