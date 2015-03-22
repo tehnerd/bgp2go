@@ -20,6 +20,7 @@ const (
 	FOUR_OCTET_SHIFT  = 4
 	ONE_OCTET         = 1
 	TWO_OCTETS        = 2
+	THREE_OCTETS      = 3
 	FOUR_OCTETS       = 4
 
 	// BGP's msg's types

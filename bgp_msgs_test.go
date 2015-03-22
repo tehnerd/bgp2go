@@ -274,7 +274,7 @@ func TestIPv6StringToUint(t *testing.T) {
 	fmt.Println(ipv6)
 }
 
-func TestIPv6NLRIEncoding(t *testing.T) {
+func TestIPv6NLRIEncodingDecoding(t *testing.T) {
 	encodedIPv6NLRI, _ := hex.DecodeString(hexIPv6NLRI)
 	nlri := IPV6_NLRI{Length: 48}
 	v6addr, err := IPv6StringToAddr("2a00:bdc0:e003::")
@@ -296,9 +296,18 @@ func TestIPv6NLRIEncoding(t *testing.T) {
 			t.Errorf("encoded ipv6 nlri is not equal to etalon")
 		}
 	}
+	decIpv6nlri, err := DecodeIPv6NLRI(encIPv6NLRI)
+	if err != nil {
+		t.Errorf("cant decode encoded nlri: %v\n", err)
+	}
+	if decIpv6nlri.Length != nlri.Length && decIpv6nlri.Prefix != nlri.Prefix {
+		fmt.Println(decIpv6nlri)
+		fmt.Println(nlri)
+		t.Errorf("decoded nlri not equal to original")
+	}
 }
 
-func TestIPv6MP_REACH_Encoding(t *testing.T) {
+func TestIPv6MP_REACH_EncodingDecoding(t *testing.T) {
 	encodedIPv6MPREACH, _ := hex.DecodeString(hexIPv6_MP_REACH)
 	nlri := IPV6_NLRI{Length: 48}
 	v6addr, _ := IPv6StringToAddr("2a00:bdc0:e003::")
@@ -315,6 +324,23 @@ func TestIPv6MP_REACH_Encoding(t *testing.T) {
 		if encIPv6MPREACH[i] != encodedIPv6MPREACH[i] {
 			t.Errorf("encoded ipv6 mp reach nlri is not equal to etalon")
 		}
+	}
+	mpReachHdr, err := DecodeMP_REACH_NLRI_HDR(encIPv6MPREACH)
+	if err != nil {
+		t.Errorf("cant decode mp_reach_nlri hdr: %v\n", err)
+	}
+	decIPv6MPREACHnh, decIPv6MPREACHnlri, err := DecodeIPV6_MP_REACH_NLRI(encIPv6MPREACH[FOUR_OCTETS:],
+		mpReachHdr)
+	if err != nil {
+		t.Errorf("cant decode encoded mp_reach_nlri for ipv6: %v\n", err)
+	}
+	if decIPv6MPREACHnlri.Prefix != nlri.Prefix || decIPv6MPREACHnlri.Length != nlri.Length ||
+		decIPv6MPREACHnh != v6nh {
+		fmt.Printf("%#v\n", nlri)
+		fmt.Printf("%#v\n", decIPv6MPREACHnlri)
+		fmt.Printf("%#v\n", v6nh)
+		fmt.Printf("%#v\n", decIPv6MPREACHnh)
+		t.Errorf("decoded nlri not equal to original\n")
 	}
 }
 

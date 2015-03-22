@@ -1,5 +1,11 @@
 package bgp2go
 
+import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+)
+
 const (
 	MP_AFI_IPV4   = 1
 	MP_AFI_IPV6   = 2
@@ -31,4 +37,28 @@ type MP_UNREACH_NLRI_HDR struct {
 	AFI  uint16
 	SAFI uint8
 	//WithdrawRoutes
+}
+
+func DecodeMP_REACH_NLRI_HDR(data []byte) (MP_REACH_NLRI_HDR, error) {
+	var hdr MP_REACH_NLRI_HDR
+	if len(data) < FOUR_OCTETS {
+		return hdr, fmt.Errorf("error in length of mp_reach_nlri hdr\n")
+	}
+	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &hdr)
+	if err != nil {
+		return hdr, fmt.Errorf("cant decode mp_reach_nlri hdr: %v\n", err)
+	}
+	return hdr, nil
+}
+
+func DecodeMP_UNREACH_NLRI_HDR(data []byte) (MP_UNREACH_NLRI_HDR, error) {
+	var hdr MP_UNREACH_NLRI_HDR
+	if len(data) < THREE_OCTETS {
+		return hdr, fmt.Errorf("error in length of mp_unreach_nlri hdr\n")
+	}
+	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &hdr)
+	if err != nil {
+		return hdr, fmt.Errorf("cant decode mp_unreach_nlri hdr: %v\n", err)
+	}
+	return hdr, nil
 }
