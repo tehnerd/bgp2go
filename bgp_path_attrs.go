@@ -160,6 +160,15 @@ func EncodeBGPRouteAttrs(bgpRoute *BGPRoute) ([]byte, error) {
 			encodedAttrs = append(encodedAttrs, data...)
 		}
 	}
+	if len(bgpRoute.WithdrawRoutesV6) != 0 {
+		for _, route := range bgpRoute.WithdrawRoutesV6 {
+			data, err = EncodeV6MPUNRNLRI(route, &pathAttr)
+			if err != nil {
+				return nil, err
+			}
+			encodedAttrs = append(encodedAttrs, data...)
+		}
+	}
 
 	return encodedAttrs, nil
 }
@@ -274,7 +283,23 @@ func EncodeV6MPRNLRI(nh IPv6Addr, nlri IPV6_NLRI, pathAttr *PathAttr) ([]byte, e
 	pathAttr.AttrFlags |= BAF_EXT_LEN
 	encodedAttr, err := EncodePathAttr(pathAttr, encData)
 	if err != nil {
-		return nil, fmt.Errorf("error during ORIGIN attr encoding: %v\n", err)
+		return nil, fmt.Errorf("error during MP_REACH_NLRI attr encoding: %v\n", err)
+	}
+	return encodedAttr, nil
+}
+
+func EncodeV6MPUNRNLRI(nlri IPV6_NLRI, pathAttr *PathAttr) ([]byte, error) {
+	pathAttr.AttrFlags = BAF_OPTIONAL
+	pathAttr.AttrTypeCode = BA_MP_UNREACH_NLRI
+	encData, err := EncodeIPV6_MP_UNREACH_NLRI(nlri)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode ipv6 mp unreach nlri: %v\n", err)
+	}
+	pathAttr.ExtendedLength = true
+	pathAttr.AttrFlags |= BAF_EXT_LEN
+	encodedAttr, err := EncodePathAttr(pathAttr, encData)
+	if err != nil {
+		return nil, fmt.Errorf("error during MP_UNREACH_NLRI attr encoding: %v\n", err)
 	}
 	return encodedAttr, nil
 }

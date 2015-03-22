@@ -318,6 +318,17 @@ func TestIPv6MP_REACH_Encoding(t *testing.T) {
 	}
 }
 
+func TestIPv6MP_UNREACH_Encoding(t *testing.T) {
+	nlri := IPV6_NLRI{Length: 48}
+	v6addr, _ := IPv6StringToAddr("2a00:bdc0:e003::")
+	nlri.Prefix = v6addr
+	encIPv6MPUNREACH, err := EncodeIPV6_MP_UNREACH_NLRI(nlri)
+	if err != nil {
+		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
+	}
+	fmt.Println(encIPv6MPUNREACH)
+}
+
 func TestIPv6MP_REACH_PathAttrEncoding(t *testing.T) {
 	encodedIPv6MPREACHPA, _ := hex.DecodeString(hexIPv6_MP_REACH_NLRI_PA)
 	nlri := IPV6_NLRI{Length: 48}
@@ -339,6 +350,39 @@ func TestIPv6MP_REACH_PathAttrEncoding(t *testing.T) {
 			t.Errorf("encoded ipv6 mp reach nlri is not equal to etalon")
 		}
 	}
+}
+
+func TestIPv6MP_UNREACH_PathAttrEncoding(t *testing.T) {
+	nlri := IPV6_NLRI{Length: 48}
+	v6addr, _ := IPv6StringToAddr("2a00:bdc0:e003::")
+	nlri.Prefix = v6addr
+	pa := PathAttr{}
+	encIPv6MPUNREACHPA, err := EncodeV6MPUNRNLRI(nlri, &pa)
+	if err != nil {
+		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
+	}
+	fmt.Println(encIPv6MPUNREACHPA)
+}
+
+func TestEncodeUpdateMsgV6(t *testing.T) {
+	bgpRoute := BGPRoute{
+		ORIGIN:          ORIGIN_IGP,
+		MULTI_EXIT_DISC: uint32(123),
+		LOCAL_PREF:      uint32(11),
+		ATOMIC_AGGR:     true,
+	}
+	bgpRoute.NEXT_HOPv6, _ = IPv6StringToAddr("fc00::1")
+	p1, _ := IPv6StringToAddr("2a02:6b8::")
+	p2, _ := IPv6StringToAddr("2a00:1450:4010::")
+	p3, _ := IPv6StringToAddr("2a03:2880:2130:cf05:face:b00c::1")
+	bgpRoute.RoutesV6 = append(bgpRoute.RoutesV6, IPV6_NLRI{Length: 32, Prefix: p1})
+	bgpRoute.RoutesV6 = append(bgpRoute.RoutesV6, IPV6_NLRI{Length: 48, Prefix: p2})
+	bgpRoute.RoutesV6 = append(bgpRoute.RoutesV6, IPV6_NLRI{Length: 128, Prefix: p3})
+	msg, err := EncodeUpdateMsg(&bgpRoute)
+	if err != nil {
+		t.Errorf("cant encode update msg with ipv6 mp_reach_nlri attr: %v\n", err)
+	}
+	fmt.Println(msg)
 }
 
 //Benchmarking
@@ -366,6 +410,25 @@ func BenchmarkEncodeUpdateMsg1(b *testing.B) {
 	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 22, Prefix: p2})
 	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 32, Prefix: p3})
 	bgpRoute.AddV4NextHop("10.0.0.2")
+	for i := 0; i < b.N; i++ {
+		EncodeUpdateMsg(&bgpRoute)
+	}
+}
+
+func BenchmarkEncodeUpdateMsgV6(b *testing.B) {
+	bgpRoute := BGPRoute{
+		ORIGIN:          ORIGIN_IGP,
+		MULTI_EXIT_DISC: uint32(123),
+		LOCAL_PREF:      uint32(11),
+		ATOMIC_AGGR:     true,
+	}
+	bgpRoute.NEXT_HOPv6, _ = IPv6StringToAddr("fc00::1")
+	p1, _ := IPv6StringToAddr("2a02:6b8::")
+	p2, _ := IPv6StringToAddr("2a00:1450:4010::")
+	p3, _ := IPv6StringToAddr("2a03:2880:2130:cf05:face:b00c::1")
+	bgpRoute.RoutesV6 = append(bgpRoute.RoutesV6, IPV6_NLRI{Length: 32, Prefix: p1})
+	bgpRoute.RoutesV6 = append(bgpRoute.RoutesV6, IPV6_NLRI{Length: 48, Prefix: p2})
+	bgpRoute.RoutesV6 = append(bgpRoute.RoutesV6, IPV6_NLRI{Length: 128, Prefix: p3})
 	for i := 0; i < b.N; i++ {
 		EncodeUpdateMsg(&bgpRoute)
 	}

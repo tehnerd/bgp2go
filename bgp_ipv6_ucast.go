@@ -57,3 +57,18 @@ func EncodeIPV6_MP_REACH_NLRI(nh IPv6Addr, nlri IPV6_NLRI) ([]byte, error) {
 	mp_reach := append(buf.Bytes(), encNLRI...)
 	return mp_reach, nil
 }
+
+func EncodeIPV6_MP_UNREACH_NLRI(nlri IPV6_NLRI) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	mpUnreachHdr := MP_UNREACH_NLRI_HDR{AFI: MP_AFI_IPV6, SAFI: MP_SAFI_UCAST}
+	err := binary.Write(buf, binary.BigEndian, &mpUnreachHdr)
+	if err != nil {
+		return nil, err
+	}
+	encNLRI, err := EncodeIPv6NLRI(nlri)
+	if err != nil {
+		return nil, err
+	}
+	mp_reach := append(buf.Bytes(), encNLRI...)
+	return mp_reach, nil
+}

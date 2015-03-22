@@ -428,9 +428,6 @@ func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 	encodedUpdate := make([]byte, 0)
 	buf := new(bytes.Buffer)
 	updMsgLen := UpdateMsgLengths{}
-	if len(bgpRoute.NEXT_HOP) == 0 {
-		return nil, fmt.Errorf("no mandatory attr(next-hop) in bgp update\n")
-	}
 	encodedAttrs, err := EncodeBGPRouteAttrs(bgpRoute)
 	if err != nil {
 		return nil, fmt.Errorf("cant encode path attributes: %v\n", err)
