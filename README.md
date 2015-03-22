@@ -4,8 +4,8 @@
  This is a package for golang which implements BGP's (rfc 4271 etc) feature sets
  
 ### Intendent usecases:
- The package must allow to participate in bgp exchange. Main goals is to be able to inject locality generated routes to 
- the bgp domain (for example from the SLBs; i've started this project as a side package, for my keepalived package) as well as
+ The package must allow to participate in bgp exchange. Main goals is to be able to inject locally generated routes to 
+ the bgp domain (for example from the SLBs; i've started this project as a side package, for my keepalived project) as well as
  to be able to recieve and process bgp msgs from the peers (for example to be used in some kind of analytic tool)
  
 ### Where it's now?
