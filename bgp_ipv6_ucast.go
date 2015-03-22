@@ -42,11 +42,13 @@ func DecodeIPv6NLRI(data []byte) (IPV6_NLRI, error) {
 	if err != nil {
 		return ipv6nlri, fmt.Errorf("cant decode ipv6 nlri length: %v\n", err)
 	}
-	data = data[ONE_OCTET:]
-	for len(data) < IPV6_ADDRESS_LEN {
-		data = append(data, 0)
+	prefixPart := make([]byte, 0)
+	prefixBytes := (ipv6nlri.Length + 7) / 8
+	prefixPart = append(prefixPart, data[ONE_OCTET:ONE_OCTET+prefixBytes]...)
+	for len(prefixPart) < IPV6_ADDRESS_LEN {
+		prefixPart = append(prefixPart, 0)
 	}
-	err = binary.Read(bytes.NewReader(data), binary.BigEndian, &ipv6nlri.Prefix)
+	err = binary.Read(bytes.NewReader(prefixPart), binary.BigEndian, &ipv6nlri.Prefix)
 	if err != nil {
 		return ipv6nlri, fmt.Errorf("cant decode ipv6 nlri prefix: %v\n", err)
 	}

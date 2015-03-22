@@ -57,21 +57,6 @@ type PathAttr struct {
 	Data           []byte
 }
 
-/*
-type BGPRoute struct {
-    ORIGIN uint8
-    //TODO: could be more that 1 path segment
-    AS_PATH         PathSegment
-    NEXT_HOP        []byte
-    MULTI_EXIT_DISC uint32
-    LOCAL_PREF      uint32
-    ATOMIC_AGGR     bool
-    AGGREGATOR      Agregator
-    Routes          []IPV4_NLRI
-}
-
-
-*/
 func EncodePathAttr(pathAttr *PathAttr, data []byte) ([]byte, error) {
 
 	buf := new(bytes.Buffer)

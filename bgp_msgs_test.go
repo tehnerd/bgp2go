@@ -390,7 +390,7 @@ func TestIPv6MP_UNREACH_PathAttrEncoding(t *testing.T) {
 	fmt.Println(encIPv6MPUNREACHPA)
 }
 
-func TestEncodeUpdateMsgV6(t *testing.T) {
+func TestEncodeDecodeUpdateMsgV6(t *testing.T) {
 	bgpRoute := BGPRoute{
 		ORIGIN:          ORIGIN_IGP,
 		MULTI_EXIT_DISC: uint32(123),
@@ -408,7 +408,22 @@ func TestEncodeUpdateMsgV6(t *testing.T) {
 	if err != nil {
 		t.Errorf("cant encode update msg with ipv6 mp_reach_nlri attr: %v\n", err)
 	}
-	fmt.Println(msg)
+	bgpRouteDec, err := DecodeUpdateMsg(msg)
+	if err != nil {
+		t.Errorf("cant decode encoded v6 route: %v\n", err)
+	}
+	if len(bgpRouteDec.RoutesV6) != 3 {
+		t.Errorf("error in ipv6 mp_nlri decoding:wrong len\n")
+	}
+	if bgpRouteDec.RoutesV6[0].Prefix != p1 &&
+		bgpRouteDec.RoutesV6[1].Prefix != p2 &&
+		bgpRouteDec.RoutesV6[2].Prefix != p3 {
+		fmt.Println(bgpRouteDec.RoutesV6)
+		fmt.Println(p1)
+		fmt.Println(p2)
+		fmt.Println(p3)
+		t.Errorf("error in ipv6 mp_nlri decoding: prefix dont match\n")
+	}
 }
 
 //Benchmarking

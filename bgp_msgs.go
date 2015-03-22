@@ -319,6 +319,11 @@ func AddAttrToRoute(bgpRoute *BGPRoute, pathAttr *PathAttr) error {
 		} else {
 			return nil
 		}
+	case BA_MP_REACH_NLRI:
+		err := DecodeMP_REACH_NLRI(pathAttr.Data, bgpRoute)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -385,10 +390,10 @@ func DecodeIPv4Route(offset, finalPosition int, msg []byte) ([]IPV4_NLRI, error)
 		}
 		offset += ONE_OCTET_SHIFT
 		//awsm trick from BIRD
-		prefixBits := int((prefix.Length + 7) / 8)
+		prefixBytes := int((prefix.Length + 7) / 8)
 		prefixPart := make([]byte, 0)
-		prefixPart = append(prefixPart, msg[offset:offset+prefixBits]...)
-		for cntr := prefixBits; cntr < 4; cntr++ {
+		prefixPart = append(prefixPart, msg[offset:offset+prefixBytes]...)
+		for cntr := prefixBytes; cntr < 4; cntr++ {
 			prefixPart = append(prefixPart, byte(0))
 		}
 		err = binary.Read(bytes.NewReader(prefixPart), binary.BigEndian, &(prefix.Prefix))
@@ -396,7 +401,7 @@ func DecodeIPv4Route(offset, finalPosition int, msg []byte) ([]IPV4_NLRI, error)
 			return prefixList, fmt.Errorf("cant decode update msg prefix: %v\n", err)
 		}
 		prefixList = append(prefixList, prefix)
-		offset += prefixBits
+		offset += prefixBytes
 	}
 	return prefixList, nil
 }
