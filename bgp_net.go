@@ -1,4 +1,4 @@
-package bgp
+package bgp2go
 
 /* Generic networking routines for bgp */
 

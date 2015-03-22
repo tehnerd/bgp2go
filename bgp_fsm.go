@@ -1,4 +1,4 @@
-package bgp
+package bgp2go
 
 /*
    Lots of fields for the future (mb) implementation

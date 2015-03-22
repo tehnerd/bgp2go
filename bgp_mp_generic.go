@@ -1,4 +1,4 @@
-package bgp
+package bgp2go
 
 const (
 	MP_AFI_IPV4   = 1

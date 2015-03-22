@@ -1,4 +1,4 @@
-package bgp
+package bgp2go
 
 /*
    simple bgp injector. main purpose is to inject/withdraw
