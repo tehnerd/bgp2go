@@ -324,6 +324,11 @@ func AddAttrToRoute(bgpRoute *BGPRoute, pathAttr *PathAttr) error {
 		if err != nil {
 			return err
 		}
+	case BA_MP_UNREACH_NLRI:
+		err := DecodeMP_UNREACH_NLRI(pathAttr.Data, bgpRoute)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -431,6 +436,9 @@ func DecodeV4NextHop(bgpRoute *BGPRoute) (uint32, error) {
 }
 
 func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
+	if len(bgpRoute.WithdrawRoutes) > 0 {
+		return EncodeWithdrawUpdateMsg(bgpRoute)
+	}
 	encodedUpdate := make([]byte, 0)
 	buf := new(bytes.Buffer)
 	updMsgLen := UpdateMsgLengths{}

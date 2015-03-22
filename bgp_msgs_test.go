@@ -251,6 +251,14 @@ func TestEncodeWithdrawUpdateMsg1(t *testing.T) {
 			break
 		}
 	}
+	data3, _ := EncodeUpdateMsg(&bgpRoute)
+	for cntr := 0; cntr < len(data); cntr++ {
+		if data[cntr] != data3[cntr] {
+			t.Errorf("error in encoding/decoding of the same withdraw msg")
+			break
+		}
+	}
+
 }
 
 func TestEncodeEndOfRIB(t *testing.T) {
@@ -424,6 +432,25 @@ func TestEncodeDecodeUpdateMsgV6(t *testing.T) {
 		fmt.Println(p3)
 		t.Errorf("error in ipv6 mp_nlri decoding: prefix dont match\n")
 	}
+}
+
+func TestEncodeDecodeWithdrawUpdateMsgV6(t *testing.T) {
+	var bgpRoute BGPRoute
+	p1, _ := IPv6StringToAddr("2a02:6b8::")
+	p2, _ := IPv6StringToAddr("2a00:1450:4010::")
+	p3, _ := IPv6StringToAddr("2a03:2880:2130:cf05:face:b00c::1")
+	bgpRoute.WithdrawRoutesV6 = append(bgpRoute.WithdrawRoutesV6, IPV6_NLRI{Length: 32, Prefix: p1})
+	bgpRoute.WithdrawRoutesV6 = append(bgpRoute.WithdrawRoutesV6, IPV6_NLRI{Length: 48, Prefix: p2})
+	bgpRoute.WithdrawRoutesV6 = append(bgpRoute.WithdrawRoutesV6, IPV6_NLRI{Length: 128, Prefix: p3})
+	msg, err := EncodeUpdateMsg(&bgpRoute)
+	if err != nil {
+		t.Errorf("cant encode update msg with ipv6 mp_reach_nlri attr: %v\n", err)
+	}
+	bgpRouteDec, err := DecodeUpdateMsg(msg)
+	if err != nil {
+		t.Errorf("cant decode encoded v6 route: %v\n", err)
+	}
+	fmt.Printf("%#v\n", bgpRouteDec)
 }
 
 //Benchmarking

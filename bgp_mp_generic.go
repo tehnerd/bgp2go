@@ -74,6 +74,28 @@ func DecodeMP_REACH_NLRI(data []byte, bgpRoute *BGPRoute) error {
 	return nil
 }
 
+func DecodeMP_UNREACH_NLRI(data []byte, bgpRoute *BGPRoute) error {
+	hdr, err := DecodeMP_UNREACH_NLRI_HDR(data)
+	if err != nil {
+		return err
+	}
+	//unreach hdr size
+	data = data[THREE_OCTET_SHIFT:]
+	switch hdr.AFI {
+	case MP_AFI_IPV4:
+	case MP_AFI_IPV6:
+		switch hdr.SAFI {
+		case MP_SAFI_UCAST:
+			nlri, err := DecodeIPv6NLRI(data)
+			if err != nil {
+				return err
+			}
+			bgpRoute.WithdrawRoutesV6 = append(bgpRoute.WithdrawRoutesV6, nlri)
+		}
+	}
+	return nil
+}
+
 func DecodeMP_UNREACH_NLRI_HDR(data []byte) (MP_UNREACH_NLRI_HDR, error) {
 	var hdr MP_UNREACH_NLRI_HDR
 	if len(data) < THREE_OCTETS {
