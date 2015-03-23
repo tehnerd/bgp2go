@@ -134,6 +134,9 @@ func BGPListenForConnection(toMainContext chan BGPCommand) error {
 			sock.Close()
 			continue
 		}
+		fd, _ := sock.File()
+		syscall.SetsockoptInt(int(fd.Fd()), syscall.IPPROTO_IP, syscall.IP_TOS, 192)
+		fd.Close()
 		go ProcessPeerConection(sock, toMainContext)
 	}
 }
