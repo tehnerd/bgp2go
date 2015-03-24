@@ -56,7 +56,10 @@ func ConnectToNeighbour(neighbour string,
 	syscall.SetsockoptInt(int(fd.Fd()), syscall.IPPROTO_IP, syscall.IP_TOS, 192)
 	fd.Close()
 	localAddr := tcpConn.LocalAddr()
-	//sending our localaddress; so it can be used as NEXT_HOP
+	/*
+		sending our localaddress; so it can be used as NEXT_HOP
+		TODO: fix for v6
+	*/
 	controlChan <- strings.Split(localAddr.String(), ":")[0]
 	go ReadFromNeighbour(tcpConn, readChan, readError)
 	go WriteToNeighbour(tcpConn, writeChan, fromWriteError, toWriteError)
@@ -118,6 +121,7 @@ func WriteToNeighbour(sock *net.TCPConn, writeChan chan []byte,
 */
 
 func BGPListenForConnection(toMainContext chan BGPCommand) error {
+	//TODO: wont work for v6
 	addr := strings.Join([]string{"", BGP_PORT}, ":")
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	//TODO: log instead of return

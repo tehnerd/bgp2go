@@ -14,6 +14,13 @@ import (
 	"time"
 )
 
+var (
+	name2AFI = map[string]MPCapability{
+		"inet":  MPCapability{AFI: MP_AFI_IPV4, SAFI: MP_SAFI_UCAST},
+		"inet6": MPCapability{AFI: MP_AFI_IPV6, SAFI: MP_SAFI_UCAST},
+	}
+)
+
 /*
    Generic per bgp process data
 */
@@ -42,6 +49,15 @@ type BGPNeighbour struct {
 	activeConnected bool
 }
 
+/*
+    struct, to which we add external info about neighbour
+	while we parsing a command from external source
+*/
+type BGPNeighbourCfg struct {
+	Address string
+	MPCaps  []MPCapability
+}
+
 type BGPCommand struct {
 	From     string
 	Cmnd     string
@@ -65,6 +81,7 @@ type BGPNeighbourContext struct {
 	RouterID      uint32
 	NextHop       string
 	fsm           FSM
+	MPCaps        []MPCapability
 	//placeholders, not yet implemented
 	InboundPolicy  string
 	OutboundPolicy string
@@ -81,6 +98,10 @@ Data: ipv4/ipv6 address/mask
 */
 type BGPProcessMsg struct {
 	Cmnd string
+	/*
+		TODO: mb it's better to use []byte instead of string
+		for Data field (for example we can pass json etc)
+	*/
 	Data string
 }
 
@@ -185,8 +206,36 @@ func (context *BGPContext) FindNeighbour(neighbour string) (*BGPNeighbour, error
 	return nil, fmt.Errorf("Neighbour doesnt exists")
 }
 
-func (context *BGPContext) AddNeighbour(neighbour string) {
-	_, err := context.FindNeighbour(neighbour)
+func parseNeighbourData(data []string, neighbourCfg *BGPNeighbourCfg) {
+	/*
+		TODO: i dont like how it's looks like; prob gonna rewrite it in future
+		e.g we will recv json with all the data from external point (Data will be []byte
+		instead of string)
+	*/
+
+	for _, field := range data {
+		if val, exists := name2AFI[field]; exists {
+			neighbourCfg.MPCaps = append(neighbourCfg.MPCaps, val)
+		}
+	}
+}
+
+func (context *BGPContext) AddNeighbour(neighbourData string) {
+	/*
+		IMPORTANT: for v6 peering to work, neighbours address
+		must be in format [<v6_addr>]. right now i'm thinking
+		that it's better to create such address in external
+		application (dont wanna add regexp checks right now into
+		this lib; mb will change my mind in future)
+		for example check: go_keepalived/notifier/bgp_nitifier.go
+	*/
+	var neighbourCfg BGPNeighbourCfg
+	dataFields := strings.Fields(neighbourData)
+	neighbourCfg.Address = dataFields[0]
+	if len(dataFields) > 1 {
+		parseNeighbourData(dataFields, &neighbourCfg)
+	}
+	_, err := context.FindNeighbour(neighbourCfg.Address)
 	if err == nil {
 		//neighbour already exists
 		return
@@ -200,13 +249,14 @@ func (context *BGPContext) AddNeighbour(neighbour string) {
 	cmndChan := make(chan BGPCommand, 1)
 	passiveCmndChan := make(chan BGPCommand, 1)
 	context.Neighbours = append(context.Neighbours, BGPNeighbour{
-		Address: neighbour,
+		Address: neighbourCfg.Address,
 		State:   "Idle", CmndChan: cmndChan,
 		toPassiveNeighbourContext: passiveCmndChan})
 	bgpNeighbourContext := BGPNeighbourContext{RouterID: context.RouterID,
 		ASN: context.ASN, ToMainContext: context.ToMainContext,
 		ToNeighbourContext: cmndChan,
-		NeighbourAddr:      neighbour}
+		NeighbourAddr:      neighbourCfg.Address}
+	bgpNeighbourContext.MPCaps = append(bgpNeighbourContext.MPCaps, neighbourCfg.MPCaps...)
 	go StartBGPNeighbourContext(&bgpNeighbourContext, false, SockControlChans{})
 }
 
@@ -794,6 +844,7 @@ func GenerateOpenMsg(context *BGPNeighbourContext, writeChan chan []byte,
 	event string) error {
 	openMsg := OpenMsg{Hdr: OpenMsgHdr{Version: uint8(4), MyASN: uint16(context.ASN),
 		BGPID: context.RouterID, HoldTime: uint16(context.fsm.HoldTime)}}
+	openMsg.MPCaps = append(openMsg.MPCaps, context.MPCaps...)
 	encodedOpen, err := EncodeOpenMsg(&openMsg)
 	if err != nil {
 		return err
