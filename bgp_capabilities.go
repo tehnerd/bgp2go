@@ -28,6 +28,19 @@ type MPCapability struct {
 	SAFI uint8
 }
 
+func isCapabilityEqual(cap1, cap2 MPCapability) bool {
+	return (cap1.AFI == cap2.AFI) && (cap1.SAFI == cap2.SAFI)
+}
+
+func capInList(mpCap MPCapability, capList []MPCapability) bool {
+	for _, val := range capList {
+		if isCapabilityEqual(mpCap, val) {
+			return true
+		}
+	}
+	return false
+}
+
 func DecodeCapability(msg []byte) (Capability, []byte, error) {
 	capability := Capability{}
 	if len(msg) < TWO_OCTETS {

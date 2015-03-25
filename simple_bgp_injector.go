@@ -19,6 +19,9 @@ var (
 		"inet":  MPCapability{AFI: MP_AFI_IPV4, SAFI: MP_SAFI_UCAST},
 		"inet6": MPCapability{AFI: MP_AFI_IPV6, SAFI: MP_SAFI_UCAST},
 	}
+
+	mpCapInet  = MPCapability{AFI: MP_AFI_IPV4, SAFI: MP_SAFI_UCAST}
+	mpCapInet6 = MPCapability{AFI: MP_AFI_IPV4, SAFI: MP_SAFI_UCAST}
 )
 
 /*
@@ -82,6 +85,13 @@ type BGPNeighbourContext struct {
 	NextHop       string
 	fsm           FSM
 	MPCaps        []MPCapability
+	/*
+		we are goingt to use this to decide should we adv routes
+		of such families to this neighbour or not.
+		TODO: mb separate struct will be better
+	*/
+	speaksInet  bool
+	speaksInet6 bool
 	//placeholders, not yet implemented
 	InboundPolicy  string
 	OutboundPolicy string
@@ -510,6 +520,27 @@ func (context *BGPNeighbourContext) GetRouterID(fromConnect chan string) {
 	//TODO: send ladr to context (so it could be used as next_hop)
 }
 
+func (context *BGPNeighbourContext) AddCapabilityFlag(mpCap MPCapability) {
+	if isCapabilityEqual(mpCap, mpCapInet) {
+		context.speaksInet = true
+	} else if isCapabilityEqual(mpCap, mpCapInet6) {
+		context.speaksInet6 = true
+	}
+}
+
+func (context *BGPNeighbourContext) removeAllCapabilityFlags() {
+	context.speaksInet = false
+	context.speaksInet6 = false
+}
+
+func (context *BGPNeighbourContext) parseValidOpen(openMsg OpenMsg) {
+	for _, mpCap := range openMsg.MPCaps {
+		if capInList(mpCap, context.MPCaps) {
+			context.AddCapabilityFlag(mpCap)
+		}
+	}
+}
+
 func StartBGPNeighbourContext(context *BGPNeighbourContext, passive bool,
 	sockChans SockControlChans) {
 	context.fsm.State = "Idle"
@@ -536,6 +567,7 @@ func StartBGPNeighbourContext(context *BGPNeighbourContext, passive bool,
 	context.fsm.KeepaliveTime = 30
 	context.fsm.DelayOpenTime = 5
 RECONNECT:
+	context.removeAllCapabilityFlags()
 	if !passive {
 		context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
 			Cmnd:         "ActiveStartConnection",
@@ -696,6 +728,7 @@ RECONNECT:
 						}
 						return
 					}
+					context.parseValidOpen(openMsg)
 					switch state {
 					case "OpenKA":
 						context.fsm.KeepaliveTime = uint32(openMsg.Hdr.HoldTime / 3)
