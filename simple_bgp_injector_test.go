@@ -8,6 +8,7 @@ import (
 func prepareConnectionPassive() (SockControlChans, chan BGPCommand, chan BGPCommand) {
 	scc := SockControlChans{}
 	scc.Init()
+	scc.localAddr = "192.168.0.2"
 	cmndChanTo := make(chan BGPCommand)
 	cmndChanFrom := make(chan BGPCommand)
 	rid, _ := IPv4ToUint32("172.16.0.1")
@@ -49,8 +50,24 @@ func TestSessionInit(t *testing.T) {
 	if err != nil {
 		t.Errorf("%v\n", err)
 	}
-	fmt.Printf("%#v\n", hdr)
 	if hdr.Type != BGP_OPEN_MSG {
 		t.Errorf("wrong first msg from passive peer")
+	}
+	_, err = DecodeOpenMsg(msg[MSG_HDR_SIZE:])
+	if err != nil {
+		t.Errorf("error in parsing open msg from passive: %v\n", err)
+	}
+	msg = <-scc.writeChan
+	hdr, err = DecodeMsgHeader(msg)
+	if err != nil {
+		t.Errorf("%v\n", err)
+	}
+	if hdr.Type != BGP_KEEPALIVE_MSG {
+		t.Errorf("error in passive fsm; 2nd msg must be keepalive")
+	}
+	scc.readChan <- GenerateKeepalive()
+	msgFromN = <-fromN
+	if msgFromN.Cmnd != "PassiveEstablished" {
+		t.Errorf("error in passive fsm. must be in PassiveEstablished state")
 	}
 }
