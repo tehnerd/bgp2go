@@ -297,21 +297,21 @@ TODO: lots of things must be implemented.(for example as_path can has more than 
 path_segment. also not sure will it work with non zero as_path (gonna test/fix it later,
 right now i need only update msg with empty as_path)
 */
-func EncodeASPathAttr(pathSegment PathSegment, pathAttr *PathAttr) ([]byte, error) {
+func EncodeASPathAttr(pathSegment []PathSegment, pathAttr *PathAttr) ([]byte, error) {
 	pathAttr.AttrFlags = BAF_TRANSITIVE
 	pathAttr.AttrTypeCode = BA_AS_PATH
 	encData := make([]byte, 0)
-	if pathSegment.PSValue != nil {
+	for _, segment := range pathSegment {
 		buf := new(bytes.Buffer)
-		err := binary.Write(buf, binary.BigEndian, &pathSegment.PSType)
+		err := binary.Write(buf, binary.BigEndian, &segment.PSType)
 		if err != nil {
 			return nil, fmt.Errorf("error during AS_PATH ps_type attr encoding: %v\n", err)
 		}
-		err = binary.Write(buf, binary.BigEndian, &pathSegment.PSLength)
+		err = binary.Write(buf, binary.BigEndian, &segment.PSLength)
 		if err != nil {
 			return nil, fmt.Errorf("error during AS_PATH ps_length attr encoding: %v\n", err)
 		}
-		for _, asn := range pathSegment.PSValue {
+		for _, asn := range segment.PSValue {
 			err = binary.Write(buf, binary.BigEndian, &asn)
 			if err != nil {
 				return nil, fmt.Errorf("error during AS_PATH asn attr encoding: %v\n", err)

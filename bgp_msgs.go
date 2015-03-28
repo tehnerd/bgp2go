@@ -140,9 +140,8 @@ type IPV4_NLRI struct {
 }
 
 type BGPRoute struct {
-	ORIGIN uint8
-	//TODO: could be more that 1 path segment
-	AS_PATH  PathSegment
+	ORIGIN   uint8
+	AS_PATH  []PathSegment
 	NEXT_HOP []byte
 	//TODO: mb it's better to use generic nh([]byte; above)
 	NEXT_HOPv6       IPv6Addr
@@ -303,18 +302,25 @@ func AddAttrToRoute(bgpRoute *BGPRoute, pathAttr *PathAttr) error {
 	case BA_AS_PATH:
 		//TODO: as_path can has more than one path segment
 		if pathAttr.AttrLength != 0 {
-			err = binary.Read(reader, binary.BigEndian, &(bgpRoute.AS_PATH.PSType))
-			err = binary.Read(reader, binary.BigEndian, &(bgpRoute.AS_PATH.PSLength))
-			if err != nil {
-				return fmt.Errorf("cant decode ASPathLen & Type: %v\n", err)
-			}
-			asn := uint16(0)
-			for cntr := 0; cntr < int(bgpRoute.AS_PATH.PSLength); cntr++ {
-				err = binary.Read(reader, binary.BigEndian, &asn)
+			segmentOffset := 0
+			for segmentOffset < int(pathAttr.AttrLength) {
+				var segment PathSegment
+				err = binary.Read(reader, binary.BigEndian, &(segment.PSType))
+				err = binary.Read(reader, binary.BigEndian, &(segment.PSLength))
 				if err != nil {
-					return fmt.Errorf("cant decode ASPathLen ASNS: %v\n", err)
+					return fmt.Errorf("cant decode ASPathLen & Type: %v\n", err)
 				}
-				bgpRoute.AS_PATH.PSValue = append(bgpRoute.AS_PATH.PSValue, asn)
+				asn := uint16(0)
+				for cntr := 0; cntr < int(segment.PSLength); cntr++ {
+					err = binary.Read(reader, binary.BigEndian, &asn)
+					if err != nil {
+						return fmt.Errorf("cant decode ASPathLen ASNS: %v\n", err)
+					}
+					segment.PSValue = append(segment.PSValue, asn)
+				}
+				bgpRoute.AS_PATH = append(bgpRoute.AS_PATH, segment)
+				//2 octes = len of pstype + pslength; 2 octest - size of 2byte asn
+				segmentOffset += (TWO_OCTET_SHIFT + TWO_OCTETS*int(segment.PSLength))
 			}
 		} else {
 			return nil
