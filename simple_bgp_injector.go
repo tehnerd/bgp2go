@@ -21,7 +21,7 @@ var (
 	}
 
 	mpCapInet  = MPCapability{AFI: MP_AFI_IPV4, SAFI: MP_SAFI_UCAST}
-	mpCapInet6 = MPCapability{AFI: MP_AFI_IPV4, SAFI: MP_SAFI_UCAST}
+	mpCapInet6 = MPCapability{AFI: MP_AFI_IPV6, SAFI: MP_SAFI_UCAST}
 )
 
 /*
@@ -50,6 +50,14 @@ type BGPNeighbour struct {
 	//for active/passive collision detection
 	passiveExist    bool
 	activeConnected bool
+	/*
+		right now i'm thinking that it will be easier to have one
+		struct with loots of bool fields that list inside of struct
+		in which we will need to search each time
+	*/
+	speaksInet  bool
+	speaksInet6 bool
+	as4         bool
 }
 
 /*
@@ -86,12 +94,13 @@ type BGPNeighbourContext struct {
 	fsm           FSM
 	MPCaps        []MPCapability
 	/*
-		we are goingt to use this to decide should we adv routes
+		we are going to use this to decide should we adv routes
 		of such families to this neighbour or not.
 		TODO: mb separate struct will be better
 	*/
 	speaksInet  bool
 	speaksInet6 bool
+	as4         bool
 	//placeholders, not yet implemented
 	InboundPolicy  string
 	OutboundPolicy string
@@ -196,7 +205,8 @@ func (context *BGPContext) ProcessNeighbourCommand(cmnd BGPCommand) {
 		context.ShouldCheckCollision(cmnd.From, false)
 
 	case "PassiveWonCollisionDetection", "PassiveClossed", "ActiveClossed",
-		"ActiveConnected", "Down", "Established", "PassiveEstablished":
+		"ActiveConnected", "Down", "Established", "PassiveEstablished",
+		"speaksInet", "speaksInet6":
 		context.ChangeNeighbourInfo(cmnd.From, cmnd.Cmnd)
 
 	case "PassiveTeardown":
@@ -354,13 +364,21 @@ func (context *BGPContext) ChangeNeighbourInfo(neighbourAddr string, cmnd string
 		neighbour.activeConnected = true
 	case "Established":
 		neighbour.State = "Established"
-		context.AdvertiseAllRoutesV4(neighbour.CmndChan)
+		if neighbour.speaksInet {
+			context.AdvertiseAllRoutesV4(neighbour.CmndChan)
+		}
 	case "PassiveEstablished":
 		neighbour.State = "Established"
 		neighbour.CmndChan = neighbour.toPassiveNeighbourContext
 		context.AdvertiseAllRoutesV4(neighbour.CmndChan)
 	case "Down":
 		neighbour.State = "Down"
+		neighbour.speaksInet = false
+		neighbour.speaksInet6 = false
+	case "speaksInet":
+		neighbour.speaksInet = true
+	case "speaksInet6":
+		neighbour.speaksInet6 = true
 	}
 
 }
@@ -459,7 +477,7 @@ func (context *BGPContext) DeleteV4Route(ipv4 uint32, mask uint8) error {
 }
 
 /*
-This is BGPContext's fun because in future we could use info from context(for global lp,
+This is BGPContext's func because in future we could use info from context(for global lp,
 aspath etc
 */
 func (context *BGPContext) GenerateUpdateRouteV4(ipv4 IPV4_NLRI) BGPRoute {
@@ -479,7 +497,7 @@ func (context *BGPContext) GenerateWithdrawRouteV4(ipv4 IPV4_NLRI) BGPRoute {
 
 func (context *BGPContext) AdvertiseRouteV4(ipv4 IPV4_NLRI) {
 	for _, neighbour := range context.Neighbours {
-		if neighbour.State == "Established" {
+		if neighbour.State == "Established" && neighbour.speaksInet {
 			neighbour.CmndChan <- BGPCommand{
 				Cmnd:  "AdvertiseRouteV4",
 				Route: context.GenerateUpdateRouteV4(ipv4)}
@@ -489,7 +507,7 @@ func (context *BGPContext) AdvertiseRouteV4(ipv4 IPV4_NLRI) {
 
 func (context *BGPContext) WithdrawRouteV4(ipv4 IPV4_NLRI) {
 	for _, neighbour := range context.Neighbours {
-		if neighbour.State == "Established" {
+		if neighbour.State == "Established" && neighbour.speaksInet {
 			neighbour.CmndChan <- BGPCommand{
 				Cmnd:  "WithdrawRouteV4",
 				Route: context.GenerateWithdrawRouteV4(ipv4)}
@@ -517,14 +535,15 @@ func (context *BGPNeighbourContext) GetRouterID(fromConnect chan string) {
 	}
 	context.NextHop = ladr
 	context.ToMainContext <- BGPCommand{Cmnd: "NewRouterID", CmndData: ladr}
-	//TODO: send ladr to context (so it could be used as next_hop)
 }
 
 func (context *BGPNeighbourContext) AddCapabilityFlag(mpCap MPCapability) {
 	if isCapabilityEqual(mpCap, mpCapInet) {
 		context.speaksInet = true
+		context.ToMainContext <- BGPCommand{From: context.NeighbourAddr, Cmnd: "speaksInet"}
 	} else if isCapabilityEqual(mpCap, mpCapInet6) {
 		context.speaksInet6 = true
+		context.ToMainContext <- BGPCommand{From: context.NeighbourAddr, Cmnd: "speaksInet6"}
 	}
 }
 
@@ -534,6 +553,17 @@ func (context *BGPNeighbourContext) removeAllCapabilityFlags() {
 }
 
 func (context *BGPNeighbourContext) parseValidOpen(openMsg OpenMsg) {
+	if len(context.MPCaps) == 0 {
+		/*
+			if we dont support any mp caps we can talk at least inet4
+			however, in theory, you can speak v4 "in old way", and any other family as mp;
+			right now we dont support it. if we have atleast one mp family, v4 MUST be advertised
+			as mp_reach/unreach as well. TODO: mb, depends on actual use casses, gona change it
+		*/
+		context.speaksInet = true
+		context.ToMainContext <- BGPCommand{From: context.NeighbourAddr, Cmnd: "speaksInet"}
+		return
+	}
 	for _, mpCap := range openMsg.MPCaps {
 		if capInList(mpCap, context.MPCaps) {
 			context.AddCapabilityFlag(mpCap)
