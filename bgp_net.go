@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"syscall"
 )
 
 const (
 	BGP_PORT = "179"
+	DSCP_CS6 = 192
 )
 
 var (
@@ -53,14 +55,13 @@ func ConnectToNeighbour(neighbour string,
 	}
 	//We want to mark our bgp packets with CS6
 	fd, _ := tcpConn.File()
-	syscall.SetsockoptInt(int(fd.Fd()), syscall.IPPROTO_IP, syscall.IP_TOS, 192)
+	syscall.SetsockoptInt(int(fd.Fd()), syscall.IPPROTO_IP, syscall.IP_TOS, DSCP_CS6)
 	fd.Close()
-	localAddr := tcpConn.LocalAddr()
 	/*
 		sending our localaddress; so it can be used as NEXT_HOP
-		TODO: fix for v6
 	*/
-	controlChan <- strings.Split(localAddr.String(), ":")[0]
+	host, _, _ := net.SplitHostPort(tcpConn.LocalAddr().String())
+	controlChan <- host
 	go ReadFromNeighbour(tcpConn, readChan, readError)
 	go WriteToNeighbour(tcpConn, writeChan, fromWriteError, toWriteError)
 	return nil
@@ -121,7 +122,6 @@ func WriteToNeighbour(sock *net.TCPConn, writeChan chan []byte,
 */
 
 func BGPListenForConnection(toMainContext chan BGPCommand) error {
-	//TODO: wont work for v6
 	addr := strings.Join([]string{"", BGP_PORT}, ":")
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	//TODO: log instead of return
@@ -139,7 +139,7 @@ func BGPListenForConnection(toMainContext chan BGPCommand) error {
 			continue
 		}
 		fd, _ := sock.File()
-		syscall.SetsockoptInt(int(fd.Fd()), syscall.IPPROTO_IP, syscall.IP_TOS, 192)
+		syscall.SetsockoptInt(int(fd.Fd()), syscall.IPPROTO_IP, syscall.IP_TOS, DSCP_CS6)
 		fd.Close()
 		go ProcessPeerConection(sock, toMainContext)
 	}
@@ -156,8 +156,10 @@ func ProcessPeerConection(sock *net.TCPConn, toMainContext chan BGPCommand) {
 		sock.Close()
 		return
 	}
-	ladr := strings.Split(sock.LocalAddr().String(), ":")[0]
-	toMainContext <- BGPCommand{Cmnd: "NewRouterID", CmndData: ladr}
+	ladr, _, _ := net.SplitHostPort(sock.LocalAddr().String())
+	if v4, _ := regexp.MatchString(`^(\d{1,3}\.){3}\d{1,3}$`, ladr); v4 {
+		toMainContext <- BGPCommand{Cmnd: "NewRouterID", CmndData: ladr}
+	}
 	sockChans.localAddr = ladr
 	go ReadFromNeighbour(sock, sockChans.readChan, sockChans.readError)
 	go WriteToNeighbour(sock, sockChans.writeChan, sockChans.fromWriteError,

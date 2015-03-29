@@ -9,6 +9,7 @@ package bgp2go
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -676,8 +677,12 @@ func (context *BGPNeighbourContext) GetRouterID(fromConnect chan string) {
 	if ladr == "exit" {
 		return
 	}
-	context.NextHop = ladr
-	context.ToMainContext <- BGPCommand{Cmnd: "NewRouterID", CmndData: ladr}
+	if v4, _ := regexp.MatchString(`^(\d{1,3}\.){3}\d{1,3}$`, ladr); v4 {
+		context.NextHop = ladr
+		context.ToMainContext <- BGPCommand{Cmnd: "NewRouterID", CmndData: ladr}
+	} else {
+		context.NextHopV6, _ = IPv6StringToAddr(ladr)
+	}
 }
 
 func (context *BGPNeighbourContext) AddCapabilityFlag(mpCap MPCapability) {
@@ -732,7 +737,12 @@ func StartBGPNeighbourContext(context *BGPNeighbourContext, passive bool,
 		localSockChans.readChan = sockChans.readChan
 		localSockChans.writeChan = sockChans.writeChan
 		localSockChans.controlChan = sockChans.controlChan
-		context.NextHop = sockChans.localAddr
+		if v4, _ := regexp.MatchString(`^(\d{1,3}\.){3}\d{1,3}$`,
+			sockChans.localAddr); v4 {
+			context.NextHop = sockChans.localAddr
+		} else {
+			context.NextHopV6, _ = IPv6StringToAddr(sockChans.localAddr)
+		}
 	}
 	keepaliveFeedback := make(chan uint8)
 	msgBuf := make([]byte, 0)
