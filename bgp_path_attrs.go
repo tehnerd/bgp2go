@@ -104,21 +104,26 @@ func EncodeBGPRouteAttrs(bgpRoute *BGPRoute) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-	}
-	encodedAttrs = append(encodedAttrs, data...)
 
-	data, err = EncodeASPathAttr(bgpRoute.AS_PATH, &pathAttr)
-	if err != nil {
-		return nil, err
+		encodedAttrs = append(encodedAttrs, data...)
 	}
-	encodedAttrs = append(encodedAttrs, data...)
 
-	if bgpRoute.MULTI_EXIT_DISC != 0 {
-		data, err = EncodeMEDAttr(&bgpRoute.MULTI_EXIT_DISC, &pathAttr)
+	if len(bgpRoute.WithdrawRoutesV6) == 0 {
+		data, err = EncodeASPathAttr(bgpRoute.AS_PATH, &pathAttr)
 		if err != nil {
 			return nil, err
 		}
 		encodedAttrs = append(encodedAttrs, data...)
+	}
+
+	if len(bgpRoute.WithdrawRoutesV6) == 0 {
+		if bgpRoute.MULTI_EXIT_DISC != 0 {
+			data, err = EncodeMEDAttr(&bgpRoute.MULTI_EXIT_DISC, &pathAttr)
+			if err != nil {
+				return nil, err
+			}
+			encodedAttrs = append(encodedAttrs, data...)
+		}
 	}
 
 	if bgpRoute.LOCAL_PREF != 0 {

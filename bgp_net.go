@@ -51,7 +51,7 @@ func ConnectToNeighbour(neighbour string,
 	if err != nil {
 		return CANT_CONNECT_ERROR
 	}
-	//We wont to mark our bgp packets with CS6
+	//We want to mark our bgp packets with CS6
 	fd, _ := tcpConn.File()
 	syscall.SetsockoptInt(int(fd.Fd()), syscall.IPPROTO_IP, syscall.IP_TOS, 192)
 	fd.Close()

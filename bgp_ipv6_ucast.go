@@ -12,6 +12,13 @@ const (
 
 type IPv6Addr [4]uint32
 
+func (ipv6 IPv6Addr) isEqual(oIpv6 IPv6Addr) bool {
+	return (ipv6[0] == oIpv6[0] &&
+		ipv6[1] == oIpv6[1] &&
+		ipv6[2] == oIpv6[2] &&
+		ipv6[3] == oIpv6[3])
+}
+
 type IPV6_NLRI struct {
 	Length uint8
 	Prefix IPv6Addr

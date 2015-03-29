@@ -32,6 +32,7 @@ type BGPContext struct {
 	RouterID uint32
 	//TODO: rib per afi/safi
 	RIBv4         []IPV4_NLRI
+	RIBv6         []IPV6_NLRI
 	ListenLocal   bool
 	Neighbours    []BGPNeighbour
 	ToMainContext chan BGPCommand
@@ -91,6 +92,7 @@ type BGPNeighbourContext struct {
 	ASN           uint32
 	RouterID      uint32
 	NextHop       string
+	NextHopV6     IPv6Addr
 	fsm           FSM
 	MPCaps        []MPCapability
 	/*
@@ -152,6 +154,10 @@ func (context *BGPContext) ProcessExternalCommand(cmnd BGPProcessMsg,
 		context.AddV4Route(cmnd.Data)
 	case "WithdrawV4Route":
 		context.WithdrawV4Route(cmnd.Data)
+	case "AddV6Route":
+		context.AddV6Route(cmnd.Data)
+	case "WithdrawV6Route":
+		context.WithdrawV6Route(cmnd.Data)
 	}
 }
 
@@ -367,10 +373,18 @@ func (context *BGPContext) ChangeNeighbourInfo(neighbourAddr string, cmnd string
 		if neighbour.speaksInet {
 			context.AdvertiseAllRoutesV4(neighbour.CmndChan)
 		}
+		if neighbour.speaksInet6 {
+			context.AdvertiseAllRoutesV6(neighbour.CmndChan)
+		}
 	case "PassiveEstablished":
 		neighbour.State = "Established"
 		neighbour.CmndChan = neighbour.toPassiveNeighbourContext
-		context.AdvertiseAllRoutesV4(neighbour.CmndChan)
+		if neighbour.speaksInet {
+			context.AdvertiseAllRoutesV4(neighbour.CmndChan)
+		}
+		if neighbour.speaksInet6 {
+			context.AdvertiseAllRoutesV6(neighbour.CmndChan)
+		}
 	case "Down":
 		neighbour.State = "Down"
 		neighbour.speaksInet = false
@@ -397,6 +411,11 @@ func (context *BGPContext) CheckNeighbourInfo(cmnd *BGPCommand) {
 		}
 	}
 }
+
+/*
+	TODO: think about how to reduce boilerplate code (to many copy/paste right now;
+	once per each afi/safi). or mb move it to sep files, like simple_injector_v4/v6 etc
+*/
 
 func (context *BGPContext) AddV4Route(route string) {
 	//TODO:check/parse route
@@ -426,6 +445,33 @@ func (context *BGPContext) AddV4Route(route string) {
 
 }
 
+func (context *BGPContext) AddV6Route(route string) {
+	//TODO:check/parse route
+	splittedRoute := strings.Split(route, "/")
+	if len(splittedRoute) != 2 {
+		return
+	}
+	val, err := strconv.ParseUint(splittedRoute[1], 10, 8)
+	if err != nil {
+		return
+	}
+	mask := uint8(val)
+	ipv6, err := IPv6StringToAddr(splittedRoute[0])
+	if err != nil {
+		return
+	}
+
+	_, err = context.FindV6Route(ipv6, mask)
+	if err == nil {
+		//this means that route already exists
+		return
+	}
+
+	newRoute := IPV6_NLRI{Length: mask, Prefix: ipv6}
+	context.RIBv6 = append(context.RIBv6, newRoute)
+	context.AdvertiseRouteV6(newRoute)
+}
+
 func (context *BGPContext) WithdrawV4Route(route string) {
 	//TODO:check/parse route
 	splittedRoute := strings.Split(route, "/")
@@ -453,6 +499,33 @@ func (context *BGPContext) WithdrawV4Route(route string) {
 
 }
 
+func (context *BGPContext) WithdrawV6Route(route string) {
+	//TODO:check/parse route
+	splittedRoute := strings.Split(route, "/")
+	if len(splittedRoute) != 2 {
+		return
+	}
+	val, err := strconv.ParseUint(splittedRoute[1], 10, 8)
+	if err != nil {
+		return
+	}
+	mask := uint8(val)
+	ipv6, err := IPv6StringToAddr(splittedRoute[0])
+	if err != nil {
+		return
+	}
+
+	err = context.DeleteV6Route(ipv6, mask)
+	if err != nil {
+		//this means that route doesnt exists
+		return
+	}
+
+	wRoute := IPV6_NLRI{Length: mask, Prefix: ipv6}
+	context.WithdrawRouteV6(wRoute)
+
+}
+
 func (context *BGPContext) FindV4Route(ipv4 uint32, mask uint8) (IPV4_NLRI, error) {
 	for _, nlri := range context.RIBv4 {
 		if nlri.Prefix == ipv4 && nlri.Length == mask {
@@ -462,6 +535,15 @@ func (context *BGPContext) FindV4Route(ipv4 uint32, mask uint8) (IPV4_NLRI, erro
 	return IPV4_NLRI{}, fmt.Errorf("route doesnt exists")
 }
 
+func (context *BGPContext) FindV6Route(ipv6 IPv6Addr, mask uint8) (IPV6_NLRI, error) {
+	for _, nlri := range context.RIBv6 {
+		if nlri.Prefix.isEqual(ipv6) && nlri.Length == mask {
+			return nlri, nil
+		}
+	}
+	return IPV6_NLRI{}, fmt.Errorf("route doesnt exists")
+}
+
 func (context *BGPContext) DeleteV4Route(ipv4 uint32, mask uint8) error {
 	for n, nlri := range context.RIBv4 {
 		if nlri.Prefix == ipv4 && nlri.Length == mask {
@@ -469,6 +551,20 @@ func (context *BGPContext) DeleteV4Route(ipv4 uint32, mask uint8) error {
 				context.RIBv4 = context.RIBv4[:n]
 			} else {
 				context.RIBv4 = append(context.RIBv4[:n], context.RIBv4[n+1:]...)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("route doesnt exist")
+}
+
+func (context *BGPContext) DeleteV6Route(ipv6 IPv6Addr, mask uint8) error {
+	for n, nlri := range context.RIBv6 {
+		if nlri.Prefix.isEqual(ipv6) && nlri.Length == mask {
+			if n == (len(context.RIBv6) - 1) {
+				context.RIBv6 = context.RIBv6[:n]
+			} else {
+				context.RIBv6 = append(context.RIBv6[:n], context.RIBv6[n+1:]...)
 			}
 			return nil
 		}
@@ -489,9 +585,24 @@ func (context *BGPContext) GenerateUpdateRouteV4(ipv4 IPV4_NLRI) BGPRoute {
 	return bgpRoute
 }
 
+func (context *BGPContext) GenerateUpdateRouteV6(ipv6 IPV6_NLRI) BGPRoute {
+	bgpRoute := BGPRoute{
+		ORIGIN:     ORIGIN_IGP,
+		LOCAL_PREF: 100,
+	}
+	bgpRoute.RoutesV6 = append(bgpRoute.RoutesV6, ipv6)
+	return bgpRoute
+}
+
 func (context *BGPContext) GenerateWithdrawRouteV4(ipv4 IPV4_NLRI) BGPRoute {
 	bgpRoute := BGPRoute{}
 	bgpRoute.WithdrawRoutes = append(bgpRoute.WithdrawRoutes, ipv4)
+	return bgpRoute
+}
+
+func (context *BGPContext) GenerateWithdrawRouteV6(ipv6 IPV6_NLRI) BGPRoute {
+	bgpRoute := BGPRoute{}
+	bgpRoute.WithdrawRoutesV6 = append(bgpRoute.WithdrawRoutesV6, ipv6)
 	return bgpRoute
 }
 
@@ -501,6 +612,16 @@ func (context *BGPContext) AdvertiseRouteV4(ipv4 IPV4_NLRI) {
 			neighbour.CmndChan <- BGPCommand{
 				Cmnd:  "AdvertiseRouteV4",
 				Route: context.GenerateUpdateRouteV4(ipv4)}
+		}
+	}
+}
+
+func (context *BGPContext) AdvertiseRouteV6(ipv6 IPV6_NLRI) {
+	for _, neighbour := range context.Neighbours {
+		if neighbour.State == "Established" && neighbour.speaksInet6 {
+			neighbour.CmndChan <- BGPCommand{
+				Cmnd:  "AdvertiseRouteV6",
+				Route: context.GenerateUpdateRouteV6(ipv6)}
 		}
 	}
 }
@@ -515,6 +636,16 @@ func (context *BGPContext) WithdrawRouteV4(ipv4 IPV4_NLRI) {
 	}
 }
 
+func (context *BGPContext) WithdrawRouteV6(ipv6 IPV6_NLRI) {
+	for _, neighbour := range context.Neighbours {
+		if neighbour.State == "Established" && neighbour.speaksInet6 {
+			neighbour.CmndChan <- BGPCommand{
+				Cmnd:  "WithdrawRouteV6",
+				Route: context.GenerateWithdrawRouteV6(ipv6)}
+		}
+	}
+}
+
 func (context *BGPContext) AdvertiseAllRoutesV4(cmndChan chan BGPCommand) {
 	for _, route := range context.RIBv4 {
 		/*
@@ -524,6 +655,18 @@ func (context *BGPContext) AdvertiseAllRoutesV4(cmndChan chan BGPCommand) {
 		cmndChan <- BGPCommand{
 			Cmnd:  "AdvertiseRouteV4",
 			Route: context.GenerateUpdateRouteV4(route)}
+	}
+}
+
+func (context *BGPContext) AdvertiseAllRoutesV6(cmndChan chan BGPCommand) {
+	for _, route := range context.RIBv6 {
+		/*
+		   TODO: pack more that one route per update; implement check, that msg size is less then
+		   bpg_max_msg_len
+		*/
+		cmndChan <- BGPCommand{
+			Cmnd:  "AdvertiseRouteV6",
+			Route: context.GenerateUpdateRouteV6(route)}
 	}
 }
 
@@ -688,9 +831,23 @@ RECONNECT:
 					}
 
 					localSockChans.writeChan <- data
-				} else if msgFromMainContext.Cmnd == "WithdrawRouteV4" {
+				} else if msgFromMainContext.Cmnd == "AdvertiseRouteV6" {
 					route := msgFromMainContext.Route
-					data, err := EncodeWithdrawUpdateMsg(&route)
+					/*
+						FIXME: not yet implemented; we dont tell context about our local address
+						from bgp_net routines
+					*/
+					route.NEXT_HOPv6 = context.NextHopV6
+					data, err := EncodeUpdateMsg(&route)
+					if err != nil {
+						continue
+					}
+
+					localSockChans.writeChan <- data
+				} else if msgFromMainContext.Cmnd == "WithdrawRouteV4" ||
+					msgFromMainContext.Cmnd == "WithdrawRouteV6" {
+					route := msgFromMainContext.Route
+					data, err := EncodeUpdateMsg(&route)
 					if err != nil {
 						continue
 					}
