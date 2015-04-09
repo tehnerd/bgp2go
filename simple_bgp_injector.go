@@ -151,6 +151,8 @@ func (context *BGPContext) ProcessExternalCommand(cmnd BGPProcessMsg,
 	switch cmnd.Cmnd {
 	case "AddNeighbour":
 		context.AddNeighbour(cmnd.Data)
+	case "RemoveNeighbour":
+		context.RemoveNeighbour(cmnd.Data)
 	case "AddV4Route":
 		context.AddV4Route(cmnd.Data)
 	case "WithdrawV4Route":
@@ -174,7 +176,7 @@ func (context *BGPContext) ProcessNeighbourCommand(cmnd BGPCommand) {
 		}
 
 	case "NewConnection":
-		neighbour, err := context.FindNeighbour(cmnd.CmndData)
+		neighbour, err, _ := context.FindNeighbour(cmnd.CmndData)
 		if err != nil {
 			cmnd.ResponseChan <- "teardown"
 			return
@@ -187,7 +189,7 @@ func (context *BGPContext) ProcessNeighbourCommand(cmnd BGPCommand) {
 		return
 
 	case "GetRouterID":
-		neighbour, err := context.FindNeighbour(cmnd.From)
+		neighbour, err, _ := context.FindNeighbour(cmnd.From)
 		if err != nil {
 			return
 		}
@@ -195,7 +197,7 @@ func (context *BGPContext) ProcessNeighbourCommand(cmnd BGPCommand) {
 			CmndData: strconv.FormatUint(uint64(context.RouterID), 10)}
 
 	case "GetRouterIDPassive":
-		neighbour, err := context.FindNeighbour(cmnd.From)
+		neighbour, err, _ := context.FindNeighbour(cmnd.From)
 		if err != nil {
 			return
 		}
@@ -224,13 +226,13 @@ func (context *BGPContext) ProcessNeighbourCommand(cmnd BGPCommand) {
 	}
 }
 
-func (context *BGPContext) FindNeighbour(neighbour string) (*BGPNeighbour, error) {
+func (context *BGPContext) FindNeighbour(neighbour string) (*BGPNeighbour, error, int) {
 	for i, existingNeighbour := range context.Neighbours {
 		if existingNeighbour.Address == neighbour {
-			return &context.Neighbours[i], nil
+			return &context.Neighbours[i], nil, i
 		}
 	}
-	return nil, fmt.Errorf("Neighbour doesnt exists")
+	return nil, fmt.Errorf("Neighbour doesnt exists"), -1
 }
 
 func parseNeighbourData(data []string, neighbourCfg *BGPNeighbourCfg) {
@@ -262,17 +264,11 @@ func (context *BGPContext) AddNeighbour(neighbourData string) {
 	if len(dataFields) > 1 {
 		parseNeighbourData(dataFields, &neighbourCfg)
 	}
-	_, err := context.FindNeighbour(neighbourCfg.Address)
+	_, err, _ := context.FindNeighbour(neighbourCfg.Address)
 	if err == nil {
 		//neighbour already exists
 		return
 	}
-	/*
-	   TODO: add neighbour address parsing and/or capability lists
-	   for example we could has data in format <address> <capabilities...>
-	   or we could check if re match for v6 address and adds v6 capability(not flexible enough,
-	   but easier to implement, and will works for slb application
-	*/
 	cmndChan := make(chan BGPCommand, 1)
 	passiveCmndChan := make(chan BGPCommand, 1)
 	context.Neighbours = append(context.Neighbours, BGPNeighbour{
@@ -287,8 +283,28 @@ func (context *BGPContext) AddNeighbour(neighbourData string) {
 	go StartBGPNeighbourContext(&bgpNeighbourContext, false, SockControlChans{})
 }
 
+func (context *BGPContext) RemoveNeighbour(neighbourData string) {
+	/*
+		IMPORTANT: for v6 peering to work, check notice @ AddNeighbour routine
+	*/
+	var neighbourCfg BGPNeighbourCfg
+	dataFields := strings.Fields(neighbourData)
+	neighbourCfg.Address = dataFields[0]
+	neighbour, err, i := context.FindNeighbour(neighbourCfg.Address)
+	if err != nil {
+		//neighbour doesnt exists
+		return
+	}
+	neighbour.CmndChan <- BGPCommand{Cmnd: "Shutdown"}
+	if i == (len(context.Neighbours) - 1) {
+		context.Neighbours = context.Neighbours[:i]
+	} else {
+		context.Neighbours = append(context.Neighbours[:i], context.Neighbours[i+1:]...)
+	}
+}
+
 func (context *BGPContext) RestartActiveNeighbour(neighbour string) {
-	bgpNeighbour, err := context.FindNeighbour(neighbour)
+	bgpNeighbour, err, _ := context.FindNeighbour(neighbour)
 	if err != nil {
 		/*
 		   should never fails, coz we restarts already existing neighbour context
@@ -309,7 +325,7 @@ func (context *BGPContext) RestartActiveNeighbour(neighbour string) {
 }
 
 func (context *BGPContext) AddPassiveNeighbour(neighbourAddr string, sockChans SockControlChans) {
-	neighbour, err := context.FindNeighbour(neighbourAddr)
+	neighbour, err, _ := context.FindNeighbour(neighbourAddr)
 	if err != nil {
 		/*
 		   FIXME: possible leak; this is very unlikely situation
@@ -329,7 +345,7 @@ func (context *BGPContext) AddPassiveNeighbour(neighbourAddr string, sockChans S
 }
 
 func (context *BGPContext) ShouldCheckCollision(neighbourAddr string, passive bool) {
-	neighbour, err := context.FindNeighbour(neighbourAddr)
+	neighbour, err, _ := context.FindNeighbour(neighbourAddr)
 	if err != nil {
 		//TODO: proper handling
 		return
@@ -354,7 +370,7 @@ func (context *BGPContext) ShouldCheckCollision(neighbourAddr string, passive bo
 }
 
 func (context *BGPContext) ChangeNeighbourInfo(neighbourAddr string, cmnd string) {
-	neighbour, err := context.FindNeighbour(neighbourAddr)
+	neighbour, err, _ := context.FindNeighbour(neighbourAddr)
 	if err != nil {
 		//TODO: proper handling
 		return
@@ -399,7 +415,7 @@ func (context *BGPContext) ChangeNeighbourInfo(neighbourAddr string, cmnd string
 }
 
 func (context *BGPContext) CheckNeighbourInfo(cmnd *BGPCommand) {
-	neighbour, err := context.FindNeighbour(cmnd.From)
+	neighbour, err, _ := context.FindNeighbour(cmnd.From)
 	if err != nil {
 		return
 	}
@@ -722,6 +738,7 @@ func (context *BGPNeighbourContext) parseValidOpen(openMsg OpenMsg) {
 func StartBGPNeighbourContext(context *BGPNeighbourContext, passive bool,
 	sockChans SockControlChans) {
 	context.fsm.State = "Idle"
+	shutdown := false
 	var localSockChans SockControlChans
 	if !passive {
 		localSockChans.fromWriteError = make(chan uint8)
@@ -822,6 +839,11 @@ RECONNECT:
 	for loop == 1 {
 		select {
 		case msgFromMainContext := <-context.ToNeighbourContext:
+			if msgFromMainContext.Cmnd == "Shutdown" {
+				shutdown = true
+				//FIXME: send notification if established
+				goto CLOSE_CONNECTION
+			}
 			if context.fsm.State == "Established" {
 				/*
 					 it's more practical from implementation point of view
@@ -1031,6 +1053,9 @@ CLOSE_CONNECTION:
 	}
 	msgBuf = msgBuf[:0]
 	context.fsm.Event("Start")
+	if shutdown {
+		return
+	}
 	if passive {
 		context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
 			Cmnd: "PassiveClossed"}

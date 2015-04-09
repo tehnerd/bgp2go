@@ -91,6 +91,7 @@ func TestSessionInit(t *testing.T) {
 	if msgFromN.Cmnd != "PassiveEstablished" {
 		t.Errorf("error in passive fsm. must be in PassiveEstablished state")
 	}
+	toN <- BGPCommand{Cmnd: "Shutdown"}
 }
 
 func TestMPSessionInit(t *testing.T) {
