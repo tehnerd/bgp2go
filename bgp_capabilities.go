@@ -13,12 +13,22 @@ import (
 const (
 	CAPABILITIES_OPTIONAL_PARAM = 2
 	CAPABILITY_MP_EXTENSION     = 1
+	CAPABILITY_AS4_NUMBER       = 65
 	MAX_UINT8                   = 255
 )
 
 type Capability struct {
 	Code   uint8
 	Length uint8
+}
+
+/*
+	XXX: implementation must insure, that open msg either contains mappend 2byte asn in
+	myasn field of open msg, or AS_TRANS(23456) if our asn > 65535
+*/
+type BGPCapabilities struct {
+	SupportASN4 bool
+	ASN4        uint32
 }
 
 //Multiprotocol Extension
@@ -28,13 +38,13 @@ type MPCapability struct {
 	SAFI uint8
 }
 
-func isCapabilityEqual(cap1, cap2 MPCapability) bool {
+func isMPCapabilityEqual(cap1, cap2 MPCapability) bool {
 	return (cap1.AFI == cap2.AFI) && (cap1.SAFI == cap2.SAFI)
 }
 
 func capInList(mpCap MPCapability, capList []MPCapability) bool {
 	for _, val := range capList {
-		if isCapabilityEqual(mpCap, val) {
+		if isMPCapabilityEqual(mpCap, val) {
 			return true
 		}
 	}
@@ -89,4 +99,27 @@ func EncodeMPCapability(mpCap MPCapability) ([]byte, error) {
 		return nil, fmt.Errorf("error during mp capability encoding: %v\n", err)
 	}
 	return buf.Bytes(), nil
+}
+
+func EncodeASN4Capability(asn4 uint32) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.BigEndian, &asn4)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode asn4: %v\n", err)
+	}
+	capability, err := EncodeCapability(Capability{Code: CAPABILITY_AS4_NUMBER, Length: FOUR_OCTETS},
+		buf.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("cant encode asn4 capabiltiy: %v\n", err)
+	}
+	return capability, nil
+}
+
+func DecodeASN4Capabiltiy(encAsn4 []byte) (uint32, error) {
+	var asn4 uint32
+	err := binary.Read(bytes.NewReader(encAsn4), binary.BigEndian, &asn4)
+	if err != nil {
+		return asn4, fmt.Errorf("cant decode asn4: %v\n", err)
+	}
+	return asn4, nil
 }

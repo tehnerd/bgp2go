@@ -85,7 +85,9 @@ type MsgHeader struct {
 type OpenMsg struct {
 	Hdr    OpenMsgHdr
 	MPCaps []MPCapability
+	Caps   BGPCapabilities
 }
+
 type OpenMsgHdr struct {
 	Version        uint8
 	MyASN          uint16
@@ -126,7 +128,7 @@ type NotificationMsg struct {
 type PathSegment struct {
 	PSType   uint8
 	PSLength uint8
-	PSValue  []uint16
+	PSValue  []uint32
 }
 
 type Agregator struct {
@@ -148,6 +150,7 @@ type BGPRoute struct {
 	MULTI_EXIT_DISC  uint32
 	LOCAL_PREF       uint32
 	ATOMIC_AGGR      bool
+	ASN4             bool
 	AGGREGATOR       Agregator
 	Routes           []IPV4_NLRI
 	RoutesV6         []IPV6_NLRI
@@ -200,12 +203,20 @@ func DecodeOpenMsg(msg []byte) (OpenMsg, error) {
 				if err != nil {
 					return openMsg, fmt.Errorf("cant decode capability hdr: %v\n", err)
 				}
-				if capHdr.Code == CAPABILITY_MP_EXTENSION {
+				switch capHdr.Code {
+				case CAPABILITY_MP_EXTENSION:
 					mpCap, err := DecodeMPCapability(capability)
 					if err != nil {
 						return openMsg, fmt.Errorf("cant decode mp capability: %v\n", err)
 					}
 					openMsg.MPCaps = append(openMsg.MPCaps, mpCap)
+				case CAPABILITY_AS4_NUMBER:
+					asn4, err := DecodeASN4Capabiltiy(capability)
+					if err != nil {
+						return openMsg, fmt.Errorf("cant decode 4byte asn capability: %v\n", err)
+					}
+					openMsg.Caps.SupportASN4 = true
+					openMsg.Caps.ASN4 = asn4
 				}
 			}
 		}
@@ -225,6 +236,18 @@ func EncodeOpenMsg(openMsg *OpenMsg) ([]byte, error) {
 			encMPCap)
 		if err != nil {
 			return nil, fmt.Errorf("cant encode capability: %v\n", err)
+		}
+		encParamHdr, err := EncodeOptionalParamHeader(OptionalParamHeader{
+			ParamType:   CAPABILITIES_OPTIONAL_PARAM,
+			ParamLength: uint8(len(encCap)),
+		})
+		encodedOptParams = append(encodedOptParams, encParamHdr...)
+		encodedOptParams = append(encodedOptParams, encCap...)
+	}
+	if openMsg.Caps.SupportASN4 {
+		encCap, err := EncodeASN4Capability(openMsg.Caps.ASN4)
+		if err != nil {
+			return nil, fmt.Errorf("cant encode asn4 cap: %v\n", err)
 		}
 		encParamHdr, err := EncodeOptionalParamHeader(OptionalParamHeader{
 			ParamType:   CAPABILITIES_OPTIONAL_PARAM,
@@ -310,17 +333,30 @@ func AddAttrToRoute(bgpRoute *BGPRoute, pathAttr *PathAttr) error {
 				if err != nil {
 					return fmt.Errorf("cant decode ASPathLen & Type: %v\n", err)
 				}
-				asn := uint16(0)
+				var asn uint16
+				var asn4 uint32
 				for cntr := 0; cntr < int(segment.PSLength); cntr++ {
-					err = binary.Read(reader, binary.BigEndian, &asn)
+					if !bgpRoute.ASN4 {
+						err = binary.Read(reader, binary.BigEndian, &asn)
+					} else {
+						err = binary.Read(reader, binary.BigEndian, &asn4)
+					}
 					if err != nil {
 						return fmt.Errorf("cant decode ASPathLen ASNS: %v\n", err)
 					}
-					segment.PSValue = append(segment.PSValue, asn)
+					if !bgpRoute.ASN4 {
+						segment.PSValue = append(segment.PSValue, uint32(asn))
+					} else {
+						segment.PSValue = append(segment.PSValue, asn4)
+					}
 				}
 				bgpRoute.AS_PATH = append(bgpRoute.AS_PATH, segment)
-				//2 octes = len of pstype + pslength; 2 octest - size of 2byte asn
-				segmentOffset += (TWO_OCTET_SHIFT + TWO_OCTETS*int(segment.PSLength))
+				//2 octes = len of pstype + pslength; 2 octest - size of asn2 and 4 octets size of asn4
+				if !bgpRoute.ASN4 {
+					segmentOffset += (TWO_OCTET_SHIFT + TWO_OCTETS*int(segment.PSLength))
+				} else {
+					segmentOffset += (TWO_OCTET_SHIFT + FOUR_OCTETS*int(segment.PSLength))
+				}
 			}
 		} else {
 			return nil
@@ -340,9 +376,10 @@ func AddAttrToRoute(bgpRoute *BGPRoute, pathAttr *PathAttr) error {
 }
 
 //will incremently add features; update msg, compare to other ones, has lots of variable length fields
-func DecodeUpdateMsg(msg []byte) (BGPRoute, error) {
+func DecodeUpdateMsg(msg []byte, caps *BGPCapabilities) (BGPRoute, error) {
 	updMsgLen := UpdateMsgLengths{}
 	bgpRoute := BGPRoute{}
+	bgpRoute.ASN4 = caps.SupportASN4
 	offset := MSG_HDR_SIZE
 	err := binary.Read(bytes.NewReader(msg[offset:]), binary.BigEndian, &(updMsgLen.WithdrawRoutesLength))
 	if err != nil {

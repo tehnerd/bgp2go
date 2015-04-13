@@ -107,9 +107,9 @@ func EncodeBGPRouteAttrs(bgpRoute *BGPRoute) ([]byte, error) {
 
 		encodedAttrs = append(encodedAttrs, data...)
 	}
-
+	//TODO: implement "withdraw" flag; so we wont check this len for each of supported mp-afi
 	if len(bgpRoute.WithdrawRoutesV6) == 0 {
-		data, err = EncodeASPathAttr(bgpRoute.AS_PATH, &pathAttr)
+		data, err = EncodeASPathAttr(bgpRoute.AS_PATH, &pathAttr, bgpRoute.ASN4)
 		if err != nil {
 			return nil, err
 		}
@@ -302,9 +302,10 @@ TODO: lots of things must be implemented.(for example as_path can has more than 
 path_segment. also not sure will it work with non zero as_path (gonna test/fix it later,
 right now i need only update msg with empty as_path)
 */
-func EncodeASPathAttr(pathSegment []PathSegment, pathAttr *PathAttr) ([]byte, error) {
+func EncodeASPathAttr(pathSegment []PathSegment, pathAttr *PathAttr, asn4 bool) ([]byte, error) {
 	pathAttr.AttrFlags = BAF_TRANSITIVE
 	pathAttr.AttrTypeCode = BA_AS_PATH
+	var as2 uint16
 	encData := make([]byte, 0)
 	for _, segment := range pathSegment {
 		buf := new(bytes.Buffer)
@@ -317,9 +318,17 @@ func EncodeASPathAttr(pathSegment []PathSegment, pathAttr *PathAttr) ([]byte, er
 			return nil, fmt.Errorf("error during AS_PATH ps_length attr encoding: %v\n", err)
 		}
 		for _, asn := range segment.PSValue {
-			err = binary.Write(buf, binary.BigEndian, &asn)
-			if err != nil {
-				return nil, fmt.Errorf("error during AS_PATH asn attr encoding: %v\n", err)
+			if !asn4 {
+				as2 = uint16(asn)
+				err = binary.Write(buf, binary.BigEndian, &as2)
+				if err != nil {
+					return nil, fmt.Errorf("error during AS_PATH asn attr encoding: %v\n", err)
+				}
+			} else {
+				err = binary.Write(buf, binary.BigEndian, &asn)
+				if err != nil {
+					return nil, fmt.Errorf("error during AS_PATH asn attr encoding: %v\n", err)
+				}
 			}
 		}
 		encData = append(encData, buf.Bytes()...)

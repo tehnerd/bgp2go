@@ -94,6 +94,7 @@ type BGPNeighbourContext struct {
 	RouterID      uint32
 	NextHop       string
 	NextHopV6     IPv6Addr
+	asn4          bool
 	fsm           FSM
 	MPCaps        []MPCapability
 	/*
@@ -702,10 +703,10 @@ func (context *BGPNeighbourContext) GetRouterID(fromConnect chan string) {
 }
 
 func (context *BGPNeighbourContext) AddCapabilityFlag(mpCap MPCapability) {
-	if isCapabilityEqual(mpCap, mpCapInet) {
+	if isMPCapabilityEqual(mpCap, mpCapInet) {
 		context.speaksInet = true
 		context.ToMainContext <- BGPCommand{From: context.NeighbourAddr, Cmnd: "speaksInet"}
-	} else if isCapabilityEqual(mpCap, mpCapInet6) {
+	} else if isMPCapabilityEqual(mpCap, mpCapInet6) {
 		context.speaksInet6 = true
 		context.ToMainContext <- BGPCommand{From: context.NeighbourAddr, Cmnd: "speaksInet6"}
 	}
@@ -733,11 +734,18 @@ func (context *BGPNeighbourContext) parseValidOpen(openMsg OpenMsg) {
 			context.AddCapabilityFlag(mpCap)
 		}
 	}
+	if openMsg.Caps.SupportASN4 {
+		context.asn4 = true
+	} else {
+		context.asn4 = false
+	}
 }
 
 func StartBGPNeighbourContext(context *BGPNeighbourContext, passive bool,
 	sockChans SockControlChans) {
 	context.fsm.State = "Idle"
+	//TODO: add/change caps depends @ info in open msg
+	bgpCaps := BGPCapabilities{ASN4: context.ASN}
 	shutdown := false
 	var localSockChans SockControlChans
 	if !passive {
@@ -865,10 +873,6 @@ RECONNECT:
 					localSockChans.writeChan <- data
 				} else if msgFromMainContext.Cmnd == "AdvertiseRouteV6" {
 					route := msgFromMainContext.Route
-					/*
-						FIXME: not yet implemented; we dont tell context about our local address
-						from bgp_net routines
-					*/
 					route.NEXT_HOPv6 = context.NextHopV6
 					data, err := EncodeUpdateMsg(&route)
 					if err != nil {
@@ -948,6 +952,7 @@ RECONNECT:
 						return
 					}
 					context.parseValidOpen(openMsg)
+					bgpCaps.SupportASN4 = context.asn4
 					switch state {
 					case "OpenKA":
 						context.fsm.KeepaliveTime = uint32(openMsg.Hdr.HoldTime / 3)
@@ -989,7 +994,7 @@ RECONNECT:
 						}
 					}
 				case BGP_UPDATE_MSG:
-					updMsg, err := DecodeUpdateMsg(msgBuf[:hdr.Length])
+					updMsg, err := DecodeUpdateMsg(msgBuf[:hdr.Length], &bgpCaps)
 					if err != nil {
 						SendNotification(context, "UpdateError", localSockChans,
 							BGP_UPDATE_MSG_ERROR, BGP_GENERIC_ERROR)
@@ -1097,9 +1102,12 @@ func SendKeepalive(writeChan chan []byte, sleepTime uint32, feedbackChan chan ui
 
 func GenerateOpenMsg(context *BGPNeighbourContext, writeChan chan []byte,
 	event string) error {
+	//TODO: check if context.ASN > 2^16; then MyASN must be AS_TRANS
 	openMsg := OpenMsg{Hdr: OpenMsgHdr{Version: uint8(4), MyASN: uint16(context.ASN),
 		BGPID: context.RouterID, HoldTime: uint16(context.fsm.HoldTime)}}
 	openMsg.MPCaps = append(openMsg.MPCaps, context.MPCaps...)
+	openMsg.Caps.SupportASN4 = true
+	openMsg.Caps.ASN4 = context.ASN
 	encodedOpen, err := EncodeOpenMsg(&openMsg)
 	if err != nil {
 		return err

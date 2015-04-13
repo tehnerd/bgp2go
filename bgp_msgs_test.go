@@ -84,12 +84,14 @@ func TestEncodeMPcapability(t *testing.T) {
 	}
 }
 
-func TestEncodeOpenWithMPcapability(t *testing.T) {
+func TestEncodeOpenWithMPcapabilityAndASN4(t *testing.T) {
 	capList := []MPCapability{
 		MPCapability{AFI: MP_AFI_IPV4, SAFI: MP_SAFI_UCAST},
 		MPCapability{AFI: MP_AFI_IPV6, SAFI: MP_SAFI_UCAST}}
 	openMsg := OpenMsg{Hdr: OpenMsgHdr{Version: 4, MyASN: 65000, HoldTime: 90, BGPID: 167772162}}
 	openMsg.MPCaps = append(openMsg.MPCaps, capList...)
+	openMsg.Caps.SupportASN4 = true
+	openMsg.Caps.ASN4 = 65000
 	data, err := EncodeOpenMsg(&openMsg)
 	if err != nil {
 		t.Errorf("cant encode open msg: %v\n", err)
@@ -119,14 +121,14 @@ func TestEncodeOpenMsg(t *testing.T) {
 
 func TestDecodeUpdateMsg(t *testing.T) {
 	encodedUpdate, _ := hex.DecodeString(hexUpdate1)
-	_, err := DecodeUpdateMsg(encodedUpdate)
+	_, err := DecodeUpdateMsg(encodedUpdate, &BGPCapabilities{})
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during update  msg decoding")
 	}
 	//PrintBgpUpdate(&bgpRoute)
 	encodedUpdate, _ = hex.DecodeString(hexUpdate2)
-	_, err = DecodeUpdateMsg(encodedUpdate)
+	_, err = DecodeUpdateMsg(encodedUpdate, &BGPCapabilities{})
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during update  msg decoding")
@@ -134,14 +136,9 @@ func TestDecodeUpdateMsg(t *testing.T) {
 	//PrintBgpUpdate(&bgpRoute)
 }
 
-/*
-   this test fails right now coz we dont support 32bit asn yet
-   bogus in as_path part; should be 1 2 3 4 5 6
-*/
-
 func TestDecodeUpdMsgWithAsPath(t *testing.T) {
 	encodedUpdate, _ := hex.DecodeString(hexUpdate4)
-	_, err := DecodeUpdateMsg(encodedUpdate)
+	_, err := DecodeUpdateMsg(encodedUpdate, &BGPCapabilities{SupportASN4: true})
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during update  msg decoding")
@@ -210,7 +207,7 @@ func TestEncodeUpdateMsg1(t *testing.T) {
 		fmt.Println(err)
 		t.Errorf("cant encode update msg")
 	}
-	bgpRoute2, err := DecodeUpdateMsg(data)
+	bgpRoute2, err := DecodeUpdateMsg(data, &BGPCapabilities{})
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("cant decode encoded update")
@@ -236,7 +233,7 @@ func TestEncodeWithdrawUpdateMsg1(t *testing.T) {
 		fmt.Println(err)
 		t.Errorf("cant encode withdraw update msg")
 	}
-	bgpRoute2, err := DecodeUpdateMsg(data)
+	bgpRoute2, err := DecodeUpdateMsg(data, &BGPCapabilities{})
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("cant decode withdraw encoded update")
@@ -416,7 +413,7 @@ func TestEncodeDecodeUpdateMsgV6(t *testing.T) {
 	if err != nil {
 		t.Errorf("cant encode update msg with ipv6 mp_reach_nlri attr: %v\n", err)
 	}
-	bgpRouteDec, err := DecodeUpdateMsg(msg)
+	bgpRouteDec, err := DecodeUpdateMsg(msg, &BGPCapabilities{})
 	if err != nil {
 		t.Errorf("cant decode encoded v6 route: %v\n", err)
 	}
@@ -446,7 +443,7 @@ func TestEncodeDecodeWithdrawUpdateMsgV6(t *testing.T) {
 	if err != nil {
 		t.Errorf("cant encode update msg with ipv6 mp_reach_nlri attr: %v\n", err)
 	}
-	bgpRouteDec, err := DecodeUpdateMsg(msg)
+	bgpRouteDec, err := DecodeUpdateMsg(msg, &BGPCapabilities{})
 	if err != nil {
 		t.Errorf("cant decode encoded v6 route: %v\n", err)
 	}
@@ -457,8 +454,9 @@ func TestEncodeDecodeWithdrawUpdateMsgV6(t *testing.T) {
 
 func BenchmarkDecodeUpdMsgWithAsPath(b *testing.B) {
 	encodedUpdate, _ := hex.DecodeString(hexUpdate4)
+	caps := BGPCapabilities{}
 	for i := 0; i < b.N; i++ {
-		DecodeUpdateMsg(encodedUpdate)
+		DecodeUpdateMsg(encodedUpdate, &caps)
 	}
 	//PrintBgpUpdate(&bgpRoute)
 
