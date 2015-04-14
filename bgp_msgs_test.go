@@ -266,6 +266,21 @@ func TestEncodeEndOfRIB(t *testing.T) {
 	}
 }
 
+func TestAddPathEncodingDecoding(t *testing.T) {
+	addPathList := []AddPathCapability{AddPathCapability{AFI: MP_AFI_IPV4, SAFI: MP_SAFI_UCAST, Flags: uint8(3)}}
+	encAddPath, err := EncodeAddPathCapability(addPathList)
+	if err != nil {
+		t.Errorf("error during add path encoding: %v\n", err)
+	}
+	_, err = DecodeAddPathCapability(encAddPath[2:])
+	if err != nil {
+		t.Errorf("error during add path encoding: %v\n", err)
+	}
+
+}
+
+/* MP-BGP MP_REACH/UNREACH_NLRI testing */
+/* ipv6 */
 func TestIPv6StringToUint(t *testing.T) {
 	_, err := IPv6StringToAddr("::")
 	if err != nil {
@@ -450,11 +465,102 @@ func TestEncodeDecodeWithdrawUpdateMsgV6(t *testing.T) {
 	fmt.Printf("%#v\n", bgpRouteDec)
 }
 
+/* ipv4 */
+
+func TestIPv4NLRIEncodingDecoding(t *testing.T) {
+	//encodedIPv6NLRI, _ := hex.DecodeString(hexIPv6NLRI)
+	nlri := IPV4_NLRI{Length: 22}
+	v4addr, err := IPv4ToUint32("10.10.252.0")
+	if err != nil {
+		t.Errorf("error during ipv4 addr converting: %v\n", err)
+	}
+	nlri.Prefix = v4addr
+	encIPv4NLRI, err := EncodeIPv4NLRI(nlri)
+	if err != nil {
+		t.Errorf("cant encode ipv4 nlri: %v\n", err)
+	}
+	decIpv4nlri, err := DecodeIPv4NLRI(encIPv4NLRI)
+	if err != nil {
+		t.Errorf("cant decode encoded nlri: %v\n", err)
+	}
+	if decIpv4nlri.Length != nlri.Length && decIpv4nlri.Prefix != nlri.Prefix {
+		fmt.Println(decIpv4nlri)
+		fmt.Println(nlri)
+		t.Errorf("decoded nlri not equal to original")
+	}
+}
+
+func TestIPv4MP_REACH_EncodingDecoding(t *testing.T) {
+	//encodedIPv6MPREACH, _ := hex.DecodeString(hexIPv6_MP_REACH)
+	nlri := IPV4_NLRI{Length: 22}
+	v4addr, _ := IPv4ToUint32("10.10.252.0")
+	v4nh, _ := IPv4ToUint32("172.16.1.1")
+	nlri.Prefix = v4addr
+	encIPv4MPREACH, err := EncodeIPV4_MP_REACH_NLRI(v4nh, nlri)
+	if err != nil {
+		t.Errorf("cant encode ipv4 mp reach nlri: %v\n", err)
+	}
+	mpReachHdr, err := DecodeMP_REACH_NLRI_HDR(encIPv4MPREACH)
+	if err != nil {
+		t.Errorf("cant decode mp_reach_nlri hdr: %v\n", err)
+	}
+	decIPv4MPREACHnh, decIPv4MPREACHnlri, err := DecodeIPV4_MP_REACH_NLRI(encIPv4MPREACH[FOUR_OCTETS:],
+		mpReachHdr)
+	if err != nil {
+		t.Errorf("cant decode encoded mp_reach_nlri for ipv4: %v\n", err)
+	}
+	if decIPv4MPREACHnlri.Prefix != nlri.Prefix || decIPv4MPREACHnlri.Length != nlri.Length ||
+		decIPv4MPREACHnh != v4nh {
+		fmt.Printf("%#v\n", nlri)
+		fmt.Printf("%#v\n", decIPv4MPREACHnlri)
+		fmt.Printf("%#v\n", v4nh)
+		fmt.Printf("%#v\n", decIPv4MPREACHnh)
+		t.Errorf("decoded nlri not equal to original\n")
+	}
+}
+
+func TestIPv4MP_UNREACH_Encoding(t *testing.T) {
+	nlri := IPV4_NLRI{Length: 22}
+	v4addr, _ := IPv4ToUint32("10.10.252.0")
+	nlri.Prefix = v4addr
+	encIPv4MPUNREACH, err := EncodeIPV4_MP_UNREACH_NLRI(nlri)
+	if err != nil {
+		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
+	}
+	fmt.Println(encIPv4MPUNREACH)
+}
+
+func TestIPv4MP_REACH_PathAttrEncoding(t *testing.T) {
+	//encodedIPv6MPREACHPA, _ := hex.DecodeString(hexIPv6_MP_REACH_NLRI_PA)
+	nlri := IPV4_NLRI{Length: 22}
+	v4addr, _ := IPv4ToUint32("10.10.252.0")
+	v4nh, _ := IPv4ToUint32("172.16.1.1")
+	nlri.Prefix = v4addr
+	pa := PathAttr{}
+	_, err := EncodeV4MPRNLRI(v4nh, nlri, &pa)
+	if err != nil {
+		t.Errorf("cant encode ipv4 mp reach nlri: %v\n", err)
+	}
+}
+
+func TestIPv4MP_UNREACH_PathAttrEncoding(t *testing.T) {
+	nlri := IPV4_NLRI{Length: 22}
+	v4addr, _ := IPv4ToUint32("10.10.252.0")
+	nlri.Prefix = v4addr
+	pa := PathAttr{}
+	encIPv4MPUNREACHPA, err := EncodeV4MPUNRNLRI(nlri, &pa)
+	if err != nil {
+		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
+	}
+	fmt.Println(encIPv4MPUNREACHPA)
+}
+
 //Benchmarking
 
 func BenchmarkDecodeUpdMsgWithAsPath(b *testing.B) {
 	encodedUpdate, _ := hex.DecodeString(hexUpdate4)
 	caps := BGPCapabilities{}
+	caps.SupportASN4 = true
 	for i := 0; i < b.N; i++ {
 		DecodeUpdateMsg(encodedUpdate, &caps)
 	}
@@ -476,6 +582,26 @@ func BenchmarkEncodeUpdateMsg1(b *testing.B) {
 	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 22, Prefix: p2})
 	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 32, Prefix: p3})
 	bgpRoute.AddV4NextHop("10.0.0.2")
+	for i := 0; i < b.N; i++ {
+		EncodeUpdateMsg(&bgpRoute)
+	}
+}
+
+func BenchmarkEncodeUpdateMsgMPINET(b *testing.B) {
+	bgpRoute := BGPRoute{
+		ORIGIN:          ORIGIN_IGP,
+		MULTI_EXIT_DISC: uint32(123),
+		LOCAL_PREF:      uint32(11),
+		ATOMIC_AGGR:     true,
+	}
+	p1, _ := IPv4ToUint32("1.92.0.0")
+	p2, _ := IPv4ToUint32("11.92.128.0")
+	p3, _ := IPv4ToUint32("1.1.1.10")
+	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 12, Prefix: p1})
+	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 22, Prefix: p2})
+	bgpRoute.Routes = append(bgpRoute.Routes, IPV4_NLRI{Length: 32, Prefix: p3})
+	bgpRoute.NEXT_HOPv4, _ = IPv4ToUint32("10.0.0.2")
+	bgpRoute.MPINET = true
 	for i := 0; i < b.N; i++ {
 		EncodeUpdateMsg(&bgpRoute)
 	}

@@ -14,6 +14,7 @@ const (
 	CAPABILITIES_OPTIONAL_PARAM = 2
 	CAPABILITY_MP_EXTENSION     = 1
 	CAPABILITY_AS4_NUMBER       = 65
+	CAPABILITY_ADD_PATH         = 69
 	MAX_UINT8                   = 255
 )
 
@@ -23,12 +24,14 @@ type Capability struct {
 }
 
 /*
-	XXX: implementation must insure, that open msg either contains mappend 2byte asn in
+	This is struct where we store session's supported capabilities
+	XXX: 4byte ASN: implementation must insure, that open msg either contains mappend 2byte asn in
 	myasn field of open msg, or AS_TRANS(23456) if our asn > 65535
 */
 type BGPCapabilities struct {
 	SupportASN4 bool
 	ASN4        uint32
+	AddPath     uint8
 }
 
 //Multiprotocol Extension
@@ -36,6 +39,14 @@ type MPCapability struct {
 	AFI  uint16
 	_    uint8
 	SAFI uint8
+}
+
+//ADDPath
+type AddPathCapability struct {
+	AFI  uint16
+	SAFI uint16
+	/* Send/Recv/both */
+	Flags uint8
 }
 
 func isMPCapabilityEqual(cap1, cap2 MPCapability) bool {
@@ -122,4 +133,47 @@ func DecodeASN4Capabiltiy(encAsn4 []byte) (uint32, error) {
 		return asn4, fmt.Errorf("cant decode asn4: %v\n", err)
 	}
 	return asn4, nil
+}
+
+/*
+	TODO: right now i've implemented only capability anounce; no actual encoding for nlri w/ add path
+	has been implemented yet
+*/
+func EncodeAddPathCapability(addPaths []AddPathCapability) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	encodedAddPaths := make([]byte, 0)
+	for _, addPath := range addPaths {
+		err := binary.Write(buf, binary.BigEndian, &addPath)
+		if err != nil {
+			return nil, fmt.Errorf("cant encode AddPath: %v\n", err)
+		}
+		encodedAddPaths = append(encodedAddPaths, buf.Bytes()...)
+	}
+	//TODO: check that len of encodedAddPaths is less than 255
+	capability, err := EncodeCapability(Capability{Code: CAPABILITY_ADD_PATH,
+		Length: uint8(len(encodedAddPaths))},
+		encodedAddPaths)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode AddPath capabiltiy: %v\n", err)
+	}
+	return capability, nil
+
+}
+
+func DecodeAddPathCapability(capability []byte) ([]AddPathCapability, error) {
+	addPathList := make([]AddPathCapability, 0)
+	addPath := AddPathCapability{}
+	if len(capability) < FIVE_OCTETS {
+		return nil, fmt.Errorf("incorrect add path capability lenght (<5)\n")
+	}
+	for len(capability) > 0 {
+		err := binary.Read(bytes.NewReader(capability), binary.BigEndian, &addPath)
+		if err != nil {
+			return nil, fmt.Errorf("cant decode add path capability: %v\n", err)
+		}
+		addPathList = append(addPathList, addPath)
+		capability = capability[FIVE_OCTETS:]
+	}
+
+	return addPathList, nil
 }

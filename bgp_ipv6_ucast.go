@@ -118,6 +118,6 @@ func EncodeIPV6_MP_UNREACH_NLRI(nlri IPV6_NLRI) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	mp_reach := append(buf.Bytes(), encNLRI...)
-	return mp_reach, nil
+	mp_unreach := append(buf.Bytes(), encNLRI...)
+	return mp_unreach, nil
 }

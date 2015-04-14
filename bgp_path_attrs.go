@@ -159,6 +159,31 @@ func EncodeBGPRouteAttrs(bgpRoute *BGPRoute) ([]byte, error) {
 			encodedAttrs = append(encodedAttrs, data...)
 		}
 	}
+	if bgpRoute.MPINET {
+		if len(bgpRoute.Routes) != 0 {
+			for _, route := range bgpRoute.Routes {
+				data, err = EncodeV4MPRNLRI(bgpRoute.NEXT_HOPv4, route, &pathAttr)
+				if err != nil {
+					return nil, err
+				}
+				encodedAttrs = append(encodedAttrs, data...)
+			}
+		}
+		if len(bgpRoute.WithdrawRoutes) != 0 {
+			for _, route := range bgpRoute.WithdrawRoutes {
+				data, err = EncodeV4MPUNRNLRI(route, &pathAttr)
+				if err != nil {
+					return nil, err
+				}
+				encodedAttrs = append(encodedAttrs, data...)
+			}
+		}
+	}
+
+	/*
+		TODO: add logic to adv ipv4 routes as mp_reach/unreach nlri (probably some bool flag
+		inside bgp route, which going to tell us if peer supports ipv4 encdoded ad mp_nlri
+	*/
 
 	return encodedAttrs, nil
 }
@@ -278,12 +303,44 @@ func EncodeV6MPRNLRI(nh IPv6Addr, nlri IPV6_NLRI, pathAttr *PathAttr) ([]byte, e
 	return encodedAttr, nil
 }
 
+func EncodeV4MPRNLRI(nh uint32, nlri IPV4_NLRI, pathAttr *PathAttr) ([]byte, error) {
+	pathAttr.AttrFlags = BAF_OPTIONAL
+	pathAttr.AttrTypeCode = BA_MP_REACH_NLRI
+	encData, err := EncodeIPV4_MP_REACH_NLRI(nh, nlri)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode ipv4 mp reach nlri: %v\n", err)
+	}
+	pathAttr.ExtendedLength = true
+	pathAttr.AttrFlags |= BAF_EXT_LEN
+	encodedAttr, err := EncodePathAttr(pathAttr, encData)
+	if err != nil {
+		return nil, fmt.Errorf("error during MP_REACH_NLRI attr encoding: %v\n", err)
+	}
+	return encodedAttr, nil
+}
+
 func EncodeV6MPUNRNLRI(nlri IPV6_NLRI, pathAttr *PathAttr) ([]byte, error) {
 	pathAttr.AttrFlags = BAF_OPTIONAL
 	pathAttr.AttrTypeCode = BA_MP_UNREACH_NLRI
 	encData, err := EncodeIPV6_MP_UNREACH_NLRI(nlri)
 	if err != nil {
 		return nil, fmt.Errorf("cant encode ipv6 mp unreach nlri: %v\n", err)
+	}
+	pathAttr.ExtendedLength = true
+	pathAttr.AttrFlags |= BAF_EXT_LEN
+	encodedAttr, err := EncodePathAttr(pathAttr, encData)
+	if err != nil {
+		return nil, fmt.Errorf("error during MP_UNREACH_NLRI attr encoding: %v\n", err)
+	}
+	return encodedAttr, nil
+}
+
+func EncodeV4MPUNRNLRI(nlri IPV4_NLRI, pathAttr *PathAttr) ([]byte, error) {
+	pathAttr.AttrFlags = BAF_OPTIONAL
+	pathAttr.AttrTypeCode = BA_MP_UNREACH_NLRI
+	encData, err := EncodeIPV4_MP_UNREACH_NLRI(nlri)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode ipv4 mp unreach nlri: %v\n", err)
 	}
 	pathAttr.ExtendedLength = true
 	pathAttr.AttrFlags |= BAF_EXT_LEN

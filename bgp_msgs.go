@@ -22,6 +22,7 @@ const (
 	TWO_OCTETS        = 2
 	THREE_OCTETS      = 3
 	FOUR_OCTETS       = 4
+	FIVE_OCTETS       = 5
 
 	// BGP's msg's types
 	BGP_OPEN_MSG         = 1
@@ -146,11 +147,14 @@ type BGPRoute struct {
 	AS_PATH  []PathSegment
 	NEXT_HOP []byte
 	//TODO: mb it's better to use generic nh([]byte; above)
-	NEXT_HOPv6       IPv6Addr
-	MULTI_EXIT_DISC  uint32
-	LOCAL_PREF       uint32
-	ATOMIC_AGGR      bool
-	ASN4             bool
+	NEXT_HOPv6      IPv6Addr
+	NEXT_HOPv4      uint32
+	MULTI_EXIT_DISC uint32
+	LOCAL_PREF      uint32
+	ATOMIC_AGGR     bool
+	ASN4            bool
+	//flag which tells us if swould adv ipv4 as mp_nrli
+	MPINET           bool
 	AGGREGATOR       Agregator
 	Routes           []IPV4_NLRI
 	RoutesV6         []IPV6_NLRI
@@ -441,7 +445,7 @@ func DecodeIPv4Route(offset, finalPosition int, msg []byte) ([]IPV4_NLRI, error)
 		prefixBytes := int((prefix.Length + 7) / 8)
 		prefixPart := make([]byte, 0)
 		prefixPart = append(prefixPart, msg[offset:offset+prefixBytes]...)
-		for cntr := prefixBytes; cntr < 4; cntr++ {
+		for cntr := prefixBytes; cntr < FOUR_OCTETS; cntr++ {
 			prefixPart = append(prefixPart, byte(0))
 		}
 		err = binary.Read(bytes.NewReader(prefixPart), binary.BigEndian, &(prefix.Prefix))

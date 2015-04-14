@@ -60,6 +60,15 @@ func DecodeMP_REACH_NLRI(data []byte, bgpRoute *BGPRoute) error {
 	data = data[FOUR_OCTET_SHIFT:]
 	switch hdr.AFI {
 	case MP_AFI_IPV4:
+		switch hdr.SAFI {
+		case MP_SAFI_UCAST:
+			nh, nlri, err := DecodeIPV4_MP_REACH_NLRI(data, hdr)
+			if err != nil {
+				return err
+			}
+			bgpRoute.NEXT_HOPv4 = nh
+			bgpRoute.Routes = append(bgpRoute.Routes, nlri)
+		}
 	case MP_AFI_IPV6:
 		switch hdr.SAFI {
 		case MP_SAFI_UCAST:
@@ -83,6 +92,14 @@ func DecodeMP_UNREACH_NLRI(data []byte, bgpRoute *BGPRoute) error {
 	data = data[THREE_OCTET_SHIFT:]
 	switch hdr.AFI {
 	case MP_AFI_IPV4:
+		switch hdr.SAFI {
+		case MP_SAFI_UCAST:
+			nlri, err := DecodeIPv4NLRI(data)
+			if err != nil {
+				return err
+			}
+			bgpRoute.WithdrawRoutes = append(bgpRoute.WithdrawRoutes, nlri)
+		}
 	case MP_AFI_IPV6:
 		switch hdr.SAFI {
 		case MP_SAFI_UCAST:
