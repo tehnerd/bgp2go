@@ -7,11 +7,12 @@ import (
 )
 
 const (
-	MP_AFI_IPV4   = 1
-	MP_AFI_IPV6   = 2
-	MP_AFI_VPLS   = 25
-	MP_SAFI_UCAST = 1
-	MP_SAFI_MCAST = 2
+	MP_AFI_IPV4     = 1
+	MP_AFI_IPV6     = 2
+	MP_AFI_VPLS     = 25
+	MP_SAFI_UCAST   = 1
+	MP_SAFI_MCAST   = 2
+	MP_SAFI_LABELED = 4
 )
 
 /*
@@ -62,7 +63,7 @@ func DecodeMP_REACH_NLRI(data []byte, bgpRoute *BGPRoute) error {
 	case MP_AFI_IPV4:
 		switch hdr.SAFI {
 		case MP_SAFI_UCAST:
-			nh, nlri, err := DecodeIPV4_MP_REACH_NLRI(data, hdr)
+			nh, nlri, err := DecodeIPV4_MP_REACH_NLRI(bgpRoute.Flags, data, hdr)
 			if err != nil {
 				return err
 			}
@@ -94,7 +95,7 @@ func DecodeMP_UNREACH_NLRI(data []byte, bgpRoute *BGPRoute) error {
 	case MP_AFI_IPV4:
 		switch hdr.SAFI {
 		case MP_SAFI_UCAST:
-			nlri, err := DecodeIPv4NLRI(data)
+			nlri, err := DecodeIPv4NLRI(bgpRoute.Flags, data)
 			if err != nil {
 				return err
 			}

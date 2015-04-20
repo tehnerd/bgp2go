@@ -11,11 +11,17 @@ const (
 )
 
 //this is routine for  encoding of ipv4 route as mp_reach/unreach nlri (part of)
-func EncodeIPv4NLRI(nlri IPV4_NLRI) ([]byte, error) {
+func EncodeIPv4NLRI(flags RouteFlags, nlri IPV4_NLRI) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	err := binary.Write(buf, binary.BigEndian, &nlri.Length)
 	if err != nil {
-		return nil, fmt.Errorf("cant encode ipv6 nlri length: %v\n", err)
+		return nil, fmt.Errorf("cant encode ipv4 nlri's length: %v\n", err)
+	}
+	if flags.Labeled {
+		err = binary.Write(buf, binary.BigEndian, &nlri.Label)
+		if err != nil {
+			return nil, fmt.Errorf("cant encode ipv4 nlri's label: %v\n", err)
+		}
 	}
 	err = binary.Write(buf, binary.BigEndian, &nlri.Prefix)
 	if err != nil {
@@ -26,10 +32,17 @@ func EncodeIPv4NLRI(nlri IPV4_NLRI) ([]byte, error) {
 }
 
 //this is routine for decoding of ipv4 route as mp_reach/unreach nlri
-func DecodeIPv4NLRI(data []byte) (IPV4_NLRI, error) {
+func DecodeIPv4NLRI(flags RouteFlags, data []byte) (IPV4_NLRI, error) {
 	nlri := IPV4_NLRI{}
 	if len(data) < ONE_OCTET {
 		return nlri, fmt.Errorf("error in ipv4 nlri length(=0)\n")
+	}
+	if flags.WithPathId {
+		err := binary.Read(bytes.NewReader(data), binary.BigEndian, &nlri.PathID)
+		if err != nil {
+			return nlri, fmt.Errorf("cant decode ipv4 pathId: %v\n", err)
+		}
+		data = data[FOUR_OCTETS:]
 	}
 	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &nlri.Length)
 	if err != nil {
@@ -48,7 +61,8 @@ func DecodeIPv4NLRI(data []byte) (IPV4_NLRI, error) {
 	return nlri, nil
 }
 
-func EncodeIPV4_MP_REACH_NLRI(nh uint32, nlri IPV4_NLRI) ([]byte, error) {
+//TODO(tehnerd): accept mp_reach_nlri_hdr as input val for func
+func EncodeIPV4_MP_REACH_NLRI(nh uint32, flags RouteFlags, nlri IPV4_NLRI) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	mpReachHdr := MP_REACH_NLRI_HDR{AFI: MP_AFI_IPV4, SAFI: MP_SAFI_UCAST,
 		NHLength: IPV4_ADDRESS_LEN}
@@ -65,7 +79,13 @@ func EncodeIPV4_MP_REACH_NLRI(nh uint32, nlri IPV4_NLRI) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	encNLRI, err := EncodeIPv4NLRI(nlri)
+	if flags.WithPathId {
+		err = binary.Write(buf, binary.BigEndian, &nlri.PathID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	encNLRI, err := EncodeIPv4NLRI(flags, nlri)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +93,8 @@ func EncodeIPV4_MP_REACH_NLRI(nh uint32, nlri IPV4_NLRI) ([]byte, error) {
 	return mp_reach, nil
 }
 
-func DecodeIPV4_MP_REACH_NLRI(data []byte, mpHdr MP_REACH_NLRI_HDR) (uint32, IPV4_NLRI, error) {
+func DecodeIPV4_MP_REACH_NLRI(flags RouteFlags,
+	data []byte, mpHdr MP_REACH_NLRI_HDR) (uint32, IPV4_NLRI, error) {
 	var nh uint32
 	var nlri IPV4_NLRI
 	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &nh)
@@ -84,21 +105,21 @@ func DecodeIPV4_MP_REACH_NLRI(data []byte, mpHdr MP_REACH_NLRI_HDR) (uint32, IPV
 		one_octet -> reserved field
 	*/
 	data = data[mpHdr.NHLength+ONE_OCTET:]
-	nlri, err = DecodeIPv4NLRI(data)
+	nlri, err = DecodeIPv4NLRI(flags, data)
 	if err != nil {
 		return nh, nlri, fmt.Errorf("cant decode ipv4 nlri: %v\n", err)
 	}
 	return nh, nlri, nil
 }
 
-func EncodeIPV4_MP_UNREACH_NLRI(nlri IPV4_NLRI) ([]byte, error) {
+func EncodeIPV4_MP_UNREACH_NLRI(flags RouteFlags, nlri IPV4_NLRI) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	mpUnreachHdr := MP_UNREACH_NLRI_HDR{AFI: MP_AFI_IPV4, SAFI: MP_SAFI_UCAST}
 	err := binary.Write(buf, binary.BigEndian, &mpUnreachHdr)
 	if err != nil {
 		return nil, err
 	}
-	encNLRI, err := EncodeIPv4NLRI(nlri)
+	encNLRI, err := EncodeIPv4NLRI(flags, nlri)
 	if err != nil {
 		return nil, err
 	}

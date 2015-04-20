@@ -475,11 +475,11 @@ func TestIPv4NLRIEncodingDecoding(t *testing.T) {
 		t.Errorf("error during ipv4 addr converting: %v\n", err)
 	}
 	nlri.Prefix = v4addr
-	encIPv4NLRI, err := EncodeIPv4NLRI(nlri)
+	encIPv4NLRI, err := EncodeIPv4NLRI(RouteFlags{}, nlri)
 	if err != nil {
 		t.Errorf("cant encode ipv4 nlri: %v\n", err)
 	}
-	decIpv4nlri, err := DecodeIPv4NLRI(encIPv4NLRI)
+	decIpv4nlri, err := DecodeIPv4NLRI(RouteFlags{}, encIPv4NLRI)
 	if err != nil {
 		t.Errorf("cant decode encoded nlri: %v\n", err)
 	}
@@ -496,7 +496,7 @@ func TestIPv4MP_REACH_EncodingDecoding(t *testing.T) {
 	v4addr, _ := IPv4ToUint32("10.10.252.0")
 	v4nh, _ := IPv4ToUint32("172.16.1.1")
 	nlri.Prefix = v4addr
-	encIPv4MPREACH, err := EncodeIPV4_MP_REACH_NLRI(v4nh, nlri)
+	encIPv4MPREACH, err := EncodeIPV4_MP_REACH_NLRI(v4nh, RouteFlags{}, nlri)
 	if err != nil {
 		t.Errorf("cant encode ipv4 mp reach nlri: %v\n", err)
 	}
@@ -504,7 +504,9 @@ func TestIPv4MP_REACH_EncodingDecoding(t *testing.T) {
 	if err != nil {
 		t.Errorf("cant decode mp_reach_nlri hdr: %v\n", err)
 	}
-	decIPv4MPREACHnh, decIPv4MPREACHnlri, err := DecodeIPV4_MP_REACH_NLRI(encIPv4MPREACH[FOUR_OCTETS:],
+	decIPv4MPREACHnh, decIPv4MPREACHnlri, err := DecodeIPV4_MP_REACH_NLRI(
+		RouteFlags{},
+		encIPv4MPREACH[FOUR_OCTETS:],
 		mpReachHdr)
 	if err != nil {
 		t.Errorf("cant decode encoded mp_reach_nlri for ipv4: %v\n", err)
@@ -523,7 +525,7 @@ func TestIPv4MP_UNREACH_Encoding(t *testing.T) {
 	nlri := IPV4_NLRI{Length: 22}
 	v4addr, _ := IPv4ToUint32("10.10.252.0")
 	nlri.Prefix = v4addr
-	encIPv4MPUNREACH, err := EncodeIPV4_MP_UNREACH_NLRI(nlri)
+	encIPv4MPUNREACH, err := EncodeIPV4_MP_UNREACH_NLRI(RouteFlags{}, nlri)
 	if err != nil {
 		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
 	}
@@ -537,7 +539,7 @@ func TestIPv4MP_REACH_PathAttrEncoding(t *testing.T) {
 	v4nh, _ := IPv4ToUint32("172.16.1.1")
 	nlri.Prefix = v4addr
 	pa := PathAttr{}
-	_, err := EncodeV4MPRNLRI(v4nh, nlri, &pa)
+	_, err := EncodeV4MPRNLRI(v4nh, RouteFlags{}, nlri, &pa)
 	if err != nil {
 		t.Errorf("cant encode ipv4 mp reach nlri: %v\n", err)
 	}
@@ -548,11 +550,58 @@ func TestIPv4MP_UNREACH_PathAttrEncoding(t *testing.T) {
 	v4addr, _ := IPv4ToUint32("10.10.252.0")
 	nlri.Prefix = v4addr
 	pa := PathAttr{}
-	encIPv4MPUNREACHPA, err := EncodeV4MPUNRNLRI(nlri, &pa)
+	encIPv4MPUNREACHPA, err := EncodeV4MPUNRNLRI(RouteFlags{}, nlri, &pa)
 	if err != nil {
 		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
 	}
 	fmt.Println(encIPv4MPUNREACHPA)
+}
+
+/* ipv4 w/ AddPath */
+
+func TestIPv4AddPathMP_REACH_EncodingDecoding(t *testing.T) {
+	//encodedIPv6MPREACH, _ := hex.DecodeString(hexIPv6_MP_REACH)
+	nlri := IPV4_NLRI{Length: 22, PathID: 10}
+	v4addr, _ := IPv4ToUint32("10.10.252.0")
+	v4nh, _ := IPv4ToUint32("172.16.1.1")
+	nlri.Prefix = v4addr
+	encIPv4MPREACH, err := EncodeIPV4_MP_REACH_NLRI(v4nh, RouteFlags{WithPathId: true},
+		nlri)
+	if err != nil {
+		t.Errorf("cant encode ipv4 mp reach nlri: %v\n", err)
+	}
+	mpReachHdr, err := DecodeMP_REACH_NLRI_HDR(encIPv4MPREACH)
+	if err != nil {
+		t.Errorf("cant decode mp_reach_nlri hdr: %v\n", err)
+	}
+	decIPv4MPREACHnh, decIPv4MPREACHnlri, err := DecodeIPV4_MP_REACH_NLRI(
+		RouteFlags{WithPathId: true},
+		encIPv4MPREACH[FOUR_OCTETS:],
+		mpReachHdr)
+	if err != nil {
+		t.Errorf("cant decode encoded mp_reach_nlri for ipv4: %v\n", err)
+	}
+	if decIPv4MPREACHnlri.Prefix != nlri.Prefix || decIPv4MPREACHnlri.Length != nlri.Length ||
+		decIPv4MPREACHnh != v4nh || decIPv4MPREACHnlri.PathID != nlri.PathID {
+		fmt.Printf("%#v\n", nlri)
+		fmt.Printf("%#v\n", decIPv4MPREACHnlri)
+		fmt.Printf("%#v\n", v4nh)
+		fmt.Printf("%#v\n", decIPv4MPREACHnh)
+		fmt.Printf("%#v\n", decIPv4MPREACHnlri.PathID)
+		t.Errorf("decoded nlri not equal to original\n")
+	}
+	fmt.Printf("%#v\n", decIPv4MPREACHnlri)
+}
+
+func TestIPv4AddPathMP_UNREACH_Encoding(t *testing.T) {
+	nlri := IPV4_NLRI{Length: 22, PathID: 10}
+	v4addr, _ := IPv4ToUint32("10.10.252.0")
+	nlri.Prefix = v4addr
+	encIPv4MPUNREACH, err := EncodeIPV4_MP_UNREACH_NLRI(RouteFlags{WithPathId: true}, nlri)
+	if err != nil {
+		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
+	}
+	fmt.Println(encIPv4MPUNREACH)
 }
 
 //Benchmarking

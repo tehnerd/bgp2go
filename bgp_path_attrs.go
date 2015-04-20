@@ -162,7 +162,8 @@ func EncodeBGPRouteAttrs(bgpRoute *BGPRoute) ([]byte, error) {
 	if bgpRoute.MPINET {
 		if len(bgpRoute.Routes) != 0 {
 			for _, route := range bgpRoute.Routes {
-				data, err = EncodeV4MPRNLRI(bgpRoute.NEXT_HOPv4, route, &pathAttr)
+				data, err = EncodeV4MPRNLRI(bgpRoute.NEXT_HOPv4,
+					bgpRoute.Flags, route, &pathAttr)
 				if err != nil {
 					return nil, err
 				}
@@ -171,7 +172,7 @@ func EncodeBGPRouteAttrs(bgpRoute *BGPRoute) ([]byte, error) {
 		}
 		if len(bgpRoute.WithdrawRoutes) != 0 {
 			for _, route := range bgpRoute.WithdrawRoutes {
-				data, err = EncodeV4MPUNRNLRI(route, &pathAttr)
+				data, err = EncodeV4MPUNRNLRI(bgpRoute.Flags, route, &pathAttr)
 				if err != nil {
 					return nil, err
 				}
@@ -303,10 +304,10 @@ func EncodeV6MPRNLRI(nh IPv6Addr, nlri IPV6_NLRI, pathAttr *PathAttr) ([]byte, e
 	return encodedAttr, nil
 }
 
-func EncodeV4MPRNLRI(nh uint32, nlri IPV4_NLRI, pathAttr *PathAttr) ([]byte, error) {
+func EncodeV4MPRNLRI(nh uint32, flags RouteFlags, nlri IPV4_NLRI, pathAttr *PathAttr) ([]byte, error) {
 	pathAttr.AttrFlags = BAF_OPTIONAL
 	pathAttr.AttrTypeCode = BA_MP_REACH_NLRI
-	encData, err := EncodeIPV4_MP_REACH_NLRI(nh, nlri)
+	encData, err := EncodeIPV4_MP_REACH_NLRI(nh, flags, nlri)
 	if err != nil {
 		return nil, fmt.Errorf("cant encode ipv4 mp reach nlri: %v\n", err)
 	}
@@ -335,10 +336,11 @@ func EncodeV6MPUNRNLRI(nlri IPV6_NLRI, pathAttr *PathAttr) ([]byte, error) {
 	return encodedAttr, nil
 }
 
-func EncodeV4MPUNRNLRI(nlri IPV4_NLRI, pathAttr *PathAttr) ([]byte, error) {
+func EncodeV4MPUNRNLRI(flags RouteFlags, nlri IPV4_NLRI,
+	pathAttr *PathAttr) ([]byte, error) {
 	pathAttr.AttrFlags = BAF_OPTIONAL
 	pathAttr.AttrTypeCode = BA_MP_UNREACH_NLRI
-	encData, err := EncodeIPV4_MP_UNREACH_NLRI(nlri)
+	encData, err := EncodeIPV4_MP_UNREACH_NLRI(flags, nlri)
 	if err != nil {
 		return nil, fmt.Errorf("cant encode ipv4 mp unreach nlri: %v\n", err)
 	}

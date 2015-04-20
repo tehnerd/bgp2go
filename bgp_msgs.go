@@ -140,6 +140,13 @@ type Agregator struct {
 type IPV4_NLRI struct {
 	Length uint8
 	Prefix uint32
+	PathID uint32
+	Label  uint32
+}
+
+type RouteFlags struct {
+	Labeled    bool
+	WithPathId bool
 }
 
 type BGPRoute struct {
@@ -152,8 +159,9 @@ type BGPRoute struct {
 	MULTI_EXIT_DISC uint32
 	LOCAL_PREF      uint32
 	ATOMIC_AGGR     bool
-	ASN4            bool
-	//flag which tells us if swould adv ipv4 as mp_nrli
+	//TODO(tehnerd): move ASN4 to RouteFlags
+	ASN4             bool
+	Flags            RouteFlags
 	MPINET           bool
 	AGGREGATOR       Agregator
 	Routes           []IPV4_NLRI
