@@ -70,8 +70,8 @@ func ConnectToNeighbour(neighbour string,
 func ReadFromNeighbour(sock *net.TCPConn, readChan chan []byte,
 	readError chan uint8) {
 	loop := 1
-	buf := make([]byte, 65535)
 	for loop == 1 {
+		buf := make([]byte, 65535)
 		bytes, err := sock.Read(buf)
 		if err != nil {
 			readError <- uint8(1)
