@@ -718,6 +718,11 @@ func (context *BGPNeighbourContext) removeAllCapabilityFlags() {
 }
 
 func (context *BGPNeighbourContext) parseValidOpen(openMsg OpenMsg) {
+	if openMsg.Caps.SupportASN4 {
+		context.asn4 = true
+	} else {
+		context.asn4 = false
+	}
 	if len(context.MPCaps) == 0 {
 		/*
 			if we dont support any mp caps we can talk at least inet4
@@ -734,11 +739,6 @@ func (context *BGPNeighbourContext) parseValidOpen(openMsg OpenMsg) {
 			context.AddCapabilityFlag(mpCap)
 		}
 	}
-	if openMsg.Caps.SupportASN4 {
-		context.asn4 = true
-	} else {
-		context.asn4 = false
-	}
 }
 
 func StartBGPNeighbourContext(context *BGPNeighbourContext, passive bool,
@@ -752,6 +752,7 @@ func StartBGPNeighbourContext(context *BGPNeighbourContext, passive bool,
 		localSockChans.fromWriteError = make(chan uint8)
 		localSockChans.toWriteError = make(chan uint8)
 		localSockChans.readError = make(chan uint8)
+		localSockChans.toReadError = make(chan uint8)
 		localSockChans.readChan = make(chan []byte)
 		localSockChans.writeChan = make(chan []byte)
 		localSockChans.controlChan = make(chan string)
@@ -759,6 +760,7 @@ func StartBGPNeighbourContext(context *BGPNeighbourContext, passive bool,
 		localSockChans.fromWriteError = sockChans.fromWriteError
 		localSockChans.toWriteError = sockChans.toWriteError
 		localSockChans.readError = sockChans.readError
+		localSockChans.toReadError = sockChans.toReadError
 		localSockChans.readChan = sockChans.readChan
 		localSockChans.writeChan = sockChans.writeChan
 		localSockChans.controlChan = sockChans.controlChan
@@ -770,6 +772,7 @@ func StartBGPNeighbourContext(context *BGPNeighbourContext, passive bool,
 		}
 	}
 	keepaliveFeedback := make(chan uint8)
+	localSockChans.keepaliveFeedback = keepaliveFeedback
 	msgBuf := make([]byte, 0)
 	context.fsm.Event("Start")
 	context.fsm.KeepaliveTime = 30
@@ -793,10 +796,10 @@ RECONNECT:
 			localSockChans.fromWriteError,
 			localSockChans.toWriteError,
 			localSockChans.readError,
+			localSockChans.toReadError,
 			localSockChans.readChan,
 			localSockChans.writeChan,
 			localSockChans.controlChan)
-
 		if err != nil {
 			if err == CANT_CONNECT_ERROR {
 				localSockChans.controlChan <- "exit"
@@ -917,6 +920,7 @@ RECONNECT:
 				if len(msgBuf) < int(hdr.Length) {
 					break
 				}
+
 				switch hdr.Type {
 				case BGP_OPEN_MSG:
 					openMsg, err := DecodeOpenMsg(msgBuf[MSG_HDR_SIZE:hdr.Length])
@@ -1130,12 +1134,9 @@ func SendNotification(context *BGPNeighbourContext, event string,
 	}
 	sockChans.writeChan <- encodedNotification
 	sockChans.toWriteError <- 0
-	//TODO: poc this; proper sync
-	select {
-	case <-sockChans.readError:
-	default:
-	}
+	sockChans.toReadError <- 1
 	if context.fsm.State == "Established" {
+		sockChans.keepaliveFeedback <- uint8(1)
 		/*
 				HACK. trying to protect ourself from deadlock, when main context trying to send something
 			    for us.TODO: to think mb there is a better solution for that
@@ -1158,10 +1159,7 @@ func SendNotification(context *BGPNeighbourContext, event string,
 func CloseSockets(context *BGPNeighbourContext, sockChans SockControlChans) {
 	sockChans.toWriteError <- 0
 	//TODO: poc this; proper sync
-	select {
-	case <-sockChans.readError:
-	default:
-	}
+	sockChans.toReadError <- 1
 	if context.fsm.State == "Established" {
 	LOOP:
 		for {

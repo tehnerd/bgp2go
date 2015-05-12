@@ -21,19 +21,22 @@ var (
 )
 
 type SockControlChans struct {
-	fromWriteError chan uint8
-	toWriteError   chan uint8
-	readError      chan uint8
-	readChan       chan []byte
-	writeChan      chan []byte
-	controlChan    chan string
-	localAddr      string
+	fromWriteError    chan uint8
+	toWriteError      chan uint8
+	readError         chan uint8
+	toReadError       chan uint8
+	readChan          chan []byte
+	writeChan         chan []byte
+	controlChan       chan string
+	localAddr         string
+	keepaliveFeedback chan uint8
 }
 
 func (sockChans *SockControlChans) Init() {
 	sockChans.fromWriteError = make(chan uint8)
 	sockChans.toWriteError = make(chan uint8)
 	sockChans.readError = make(chan uint8)
+	sockChans.toReadError = make(chan uint8)
 	sockChans.readChan = make(chan []byte)
 	sockChans.writeChan = make(chan []byte)
 	sockChans.controlChan = make(chan string)
@@ -41,7 +44,7 @@ func (sockChans *SockControlChans) Init() {
 }
 
 func ConnectToNeighbour(neighbour string,
-	fromWriteError, toWriteError, readError chan uint8,
+	fromWriteError, toWriteError, readError, toReadError chan uint8,
 	readChan, writeChan chan []byte,
 	controlChan chan string) error {
 	remoteAddr := strings.Join([]string{neighbour, BGP_PORT}, ":")
@@ -62,23 +65,33 @@ func ConnectToNeighbour(neighbour string,
 	*/
 	host, _, _ := net.SplitHostPort(tcpConn.LocalAddr().String())
 	controlChan <- host
-	go ReadFromNeighbour(tcpConn, readChan, readError)
+	go ReadFromNeighbour(tcpConn, readChan, readError, toReadError)
 	go WriteToNeighbour(tcpConn, writeChan, fromWriteError, toWriteError)
 	return nil
 }
 
 func ReadFromNeighbour(sock *net.TCPConn, readChan chan []byte,
-	readError chan uint8) {
+	readError, toReadError chan uint8) {
 	loop := 1
 	for loop == 1 {
-		buf := make([]byte, 65535)
+		buf := make([]byte, 1024)
 		bytes, err := sock.Read(buf)
 		if err != nil {
-			readError <- uint8(1)
+			select {
+			case readError <- uint8(1):
+				loop = 0
+				continue
+			case <-toReadError:
+				loop = 0
+				continue
+			}
+		}
+		select {
+		case readChan <- buf[:bytes]:
+		case <-toReadError:
 			loop = 0
 			continue
 		}
-		readChan <- buf[:bytes]
 	}
 }
 
@@ -161,7 +174,8 @@ func ProcessPeerConection(sock *net.TCPConn, toMainContext chan BGPCommand) {
 		toMainContext <- BGPCommand{Cmnd: "NewRouterID", CmndData: ladr}
 	}
 	sockChans.localAddr = ladr
-	go ReadFromNeighbour(sock, sockChans.readChan, sockChans.readError)
+	go ReadFromNeighbour(sock, sockChans.readChan, sockChans.readError,
+		sockChans.toReadError)
 	go WriteToNeighbour(sock, sockChans.writeChan, sockChans.fromWriteError,
 		sockChans.toWriteError)
 	toMainContext <- BGPCommand{Cmnd: "AddPassiveNeighbour", CmndData: radr,
