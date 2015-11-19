@@ -181,10 +181,15 @@ func EncodeBGPRouteAttrs(bgpRoute *BGPRoute) ([]byte, error) {
 		}
 	}
 
-	/*
-		TODO: add logic to adv ipv4 routes as mp_reach/unreach nlri (probably some bool flag
-		inside bgp route, which going to tell us if peer supports ipv4 encdoded ad mp_nlri
-	*/
+	if len(bgpRoute.Community) != 0 {
+		for _, community := range bgpRoute.Community {
+			data, err := EncodeBGPCommunity(community, &pathAttr)
+			if err != nil {
+				return nil, err
+			}
+			encodedAttrs = append(encodedAttrs, data...)
+		}
+	}
 
 	return encodedAttrs, nil
 }
@@ -353,8 +358,21 @@ func EncodeV4MPUNRNLRI(flags RouteFlags, nlri IPV4_NLRI,
 	return encodedAttr, nil
 }
 
-/*
-
+func EncodeBGPCommunity(community uint32, pathAttr *PathAttr) ([]byte, error) {
+	pathAttr.AttrFlags = BAF_TRANSITIVE | BAF_OPTIONAL
+	pathAttr.AttrTypeCode = BA_COMMUNITY
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.BigEndian, &community)
+	if err != nil {
+		return nil, fmt.Errorf("error during community encoding: %v\n", err)
+	}
+	pathAttr.ExtendedLength = false
+	encodedAttr, err := EncodePathAttr(pathAttr, buf.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("error during AS_PATH attr encoding: %v\n", err)
+	}
+	return encodedAttr, nil
+}
 
 /*
 TODO: lots of things must be implemented.(for example as_path can has more than one

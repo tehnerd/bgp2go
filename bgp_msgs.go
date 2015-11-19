@@ -168,6 +168,7 @@ type BGPRoute struct {
 	RoutesV6         []IPV6_NLRI
 	WithdrawRoutes   []IPV4_NLRI
 	WithdrawRoutesV6 []IPV6_NLRI
+	Community        []uint32
 }
 
 func DecodeMsgHeader(msg []byte) (MsgHeader, error) {

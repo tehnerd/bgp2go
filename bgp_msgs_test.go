@@ -226,6 +226,7 @@ func TestEncodeUpdateMsg1(t *testing.T) {
 
 func TestEncodeWithdrawUpdateMsg1(t *testing.T) {
 	bgpRoute := BGPRoute{}
+	bgpRoute.Community = []uint32{1, 2, 3, 4}
 	p4, _ := IPv4ToUint32("192.168.0.0")
 	bgpRoute.WithdrawRoutes = append(bgpRoute.WithdrawRoutes, IPV4_NLRI{Length: 16, Prefix: p4})
 	data, err := EncodeWithdrawUpdateMsg(&bgpRoute)
