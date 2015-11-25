@@ -43,7 +43,8 @@ func EncodeIPv6NLRI(nlri IPV6_NLRI) ([]byte, error) {
 func DecodeIPv6NLRI(data []byte) (IPV6_NLRI, error) {
 	ipv6nlri := IPV6_NLRI{}
 	if len(data) < ONE_OCTET {
-		return ipv6nlri, fmt.Errorf("error in ipv6nlri length(=0)\n")
+		//This is EOR Marker
+		return ipv6nlri, nil
 	}
 	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &ipv6nlri.Length)
 	if err != nil {

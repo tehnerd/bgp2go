@@ -212,24 +212,27 @@ func DecodeOpenMsg(msg []byte) (OpenMsg, error) {
 			}
 			msg = msg[TWO_OCTETS+optParamHdr.ParamLength:]
 			if optParamHdr.ParamType == CAPABILITIES_OPTIONAL_PARAM {
-				capHdr, capability, err := DecodeCapability(optParam)
-				if err != nil {
-					return openMsg, fmt.Errorf("cant decode capability hdr: %v\n", err)
-				}
-				switch capHdr.Code {
-				case CAPABILITY_MP_EXTENSION:
-					mpCap, err := DecodeMPCapability(capability)
+				for len(optParam) > 0 {
+					capHdr, capability, err := DecodeCapability(optParam)
+					optParam = optParam[TWO_OCTETS+capHdr.Length:]
 					if err != nil {
-						return openMsg, fmt.Errorf("cant decode mp capability: %v\n", err)
+						return openMsg, fmt.Errorf("cant decode capability hdr: %v\n", err)
 					}
-					openMsg.MPCaps = append(openMsg.MPCaps, mpCap)
-				case CAPABILITY_AS4_NUMBER:
-					asn4, err := DecodeASN4Capabiltiy(capability)
-					if err != nil {
-						return openMsg, fmt.Errorf("cant decode 4byte asn capability: %v\n", err)
+					switch capHdr.Code {
+					case CAPABILITY_MP_EXTENSION:
+						mpCap, err := DecodeMPCapability(capability)
+						if err != nil {
+							return openMsg, fmt.Errorf("cant decode mp capability: %v\n", err)
+						}
+						openMsg.MPCaps = append(openMsg.MPCaps, mpCap)
+					case CAPABILITY_AS4_NUMBER:
+						asn4, err := DecodeASN4Capabiltiy(capability)
+						if err != nil {
+							return openMsg, fmt.Errorf("cant decode 4byte asn capability: %v\n", err)
+						}
+						openMsg.Caps.SupportASN4 = true
+						openMsg.Caps.ASN4 = asn4
 					}
-					openMsg.Caps.SupportASN4 = true
-					openMsg.Caps.ASN4 = asn4
 				}
 			}
 		}
@@ -420,7 +423,7 @@ func DecodeUpdateMsg(msg []byte, caps *BGPCapabilities) (BGPRoute, error) {
 		}
 		err := AddAttrToRoute(&bgpRoute, &pathAttr)
 		if err != nil {
-			return bgpRoute, fmt.Errorf("cant update msg attribute data: %v\n", err)
+			return bgpRoute, fmt.Errorf("cant decode update msg attribute data: %v\n", err)
 		}
 		//Size of path's attr heaer either 3 of 4 octets
 		if pathAttr.ExtendedLength {
@@ -518,7 +521,9 @@ func EncodeUpdateMsg(bgpRoute *BGPRoute) ([]byte, error) {
 	}
 	encodedUpdate = append(encodedUpdate, buf.Bytes()[TWO_OCTET_SHIFT:]...)
 	encodedUpdate = append(encodedUpdate, encodedAttrs...)
-	encodedUpdate = append(encodedUpdate, encodedRoutes...)
+	if !bgpRoute.MPINET {
+		encodedUpdate = append(encodedUpdate, encodedRoutes...)
+	}
 	msgHdr := MsgHeader{Type: BGP_UPDATE_MSG, Length: MSG_HDR_SIZE + uint16(len(encodedUpdate))}
 	encMsgHdr, err := EncodeMsgHeader(&msgHdr)
 	if err != nil {

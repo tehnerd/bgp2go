@@ -867,7 +867,6 @@ RECONNECT:
 					if err != nil {
 						continue
 					}
-
 					data, err := EncodeUpdateMsg(&route)
 					if err != nil {
 						continue
