@@ -449,7 +449,7 @@ func DecodeUpdateMsg(msg []byte, caps *BGPCapabilities) (BGPRoute, error) {
 	if err != nil {
 		return bgpRoute, err
 	}
-	bgpRoute.Routes = routes
+	bgpRoute.Routes = append(bgpRoute.Routes, routes...)
 	return bgpRoute, nil
 }
 

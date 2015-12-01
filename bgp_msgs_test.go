@@ -26,6 +26,7 @@ func TestDecodeMsgHeader(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during bgp msg header decoding")
+		return
 	}
 }
 
@@ -36,15 +37,18 @@ func TestEncodeMsgHeader(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during bgp msg header encoding")
+		return
 	}
 	if len(encMsgHdr) != 19 {
 		fmt.Println(len(encMsgHdr))
 		fmt.Println(encMsgHdr)
 		t.Errorf("error in len of encoded hdr")
+		return
 	}
 	for cntr := 0; cntr < len(encMsgHdr); cntr++ {
 		if encMsgHdr[cntr] != encodedOpen[cntr] {
 			t.Errorf("byte of encoded msg is not equal to etalon's msg")
+			return
 		}
 	}
 }
@@ -55,6 +59,7 @@ func TestDecodeOpenMsg(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during open msg decoding: %v\n", err)
+		return
 	}
 	fmt.Printf("%#v\n", openMsg)
 }
@@ -64,24 +69,30 @@ func TestEncodeMPcapability(t *testing.T) {
 	encMpCap, err := EncodeMPCapability(mpCap)
 	if err != nil {
 		t.Errorf("cant encode mpCap")
+		return
 	}
 	encCap, err := EncodeCapability(Capability{Code: CAPABILITY_MP_EXTENSION}, encMpCap)
 	if err != nil {
 		t.Errorf("cant encode capability")
+		return
 	}
 	capability, data, err := DecodeCapability(encCap)
 	if capability.Code != CAPABILITY_MP_EXTENSION {
 		t.Errorf("error during capability decoding")
+		return
 	}
 	if err != nil {
 		t.Errorf("can decode encoded capability")
+		return
 	}
 	decMpCap, err := DecodeMPCapability(data)
 	if err != nil {
 		t.Errorf("cant decode encoded mp capability")
+		return
 	}
 	if decMpCap.AFI != mpCap.AFI || decMpCap.SAFI != mpCap.SAFI {
 		t.Errorf("error during enc/dec of mp cap")
+		return
 	}
 }
 
@@ -96,10 +107,12 @@ func TestEncodeOpenWithMPcapabilityAndASN4(t *testing.T) {
 	data, err := EncodeOpenMsg(&openMsg)
 	if err != nil {
 		t.Errorf("cant encode open msg: %v\n", err)
+		return
 	}
 	_, err = DecodeOpenMsg(data[MSG_HDR_SIZE:])
 	if err != nil {
 		t.Errorf("cant decoded encoded msg: %v\n", err)
+		return
 	}
 }
 
@@ -110,12 +123,14 @@ func TestEncodeOpenMsg(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during open msg  encoding")
+		return
 	}
 	//HACKISH TEST; we dont know how to encode all of the opt params and caps in etalon msg
 	//so here we only tests how we have encoded ans,holdtime etc
 	for cntr := 19; cntr < MIN_OPEN_MSG_SIZE-2; cntr++ {
 		if encOpenMsg[cntr] != encodedOpen[cntr] {
 			t.Errorf("byte of encoded msg is not equal to etalon's msg")
+			return
 		}
 	}
 }
@@ -126,6 +141,7 @@ func TestDecodeUpdateMsg(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during update  msg decoding")
+		return
 	}
 	//PrintBgpUpdate(&bgpRoute)
 	encodedUpdate, _ = hex.DecodeString(hexUpdate2)
@@ -133,6 +149,7 @@ func TestDecodeUpdateMsg(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during update  msg decoding")
+		return
 	}
 	//PrintBgpUpdate(&bgpRoute)
 }
@@ -143,6 +160,7 @@ func TestDecodeUpdMsgWithAsPath(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during update  msg decoding")
+		return
 	}
 	//PrintBgpUpdate(&bgpRoute)
 
@@ -154,6 +172,7 @@ func TestEncodeKeepaliveMsg(t *testing.T) {
 	for cntr := 0; cntr < len(encKA); cntr++ {
 		if encKA[cntr] != encodedKA[cntr] {
 			t.Errorf("byte of encoded msg is not equal to etalon's msg")
+			return
 		}
 	}
 }
@@ -163,9 +182,11 @@ func TestDecodeNotificationMsg(t *testing.T) {
 	notification, err := DecodeNotificationMsg(encodedNotification)
 	if err != nil {
 		t.Errorf("error during notification decoding")
+		return
 	}
 	if notification.ErrorCode != 6 && notification.ErrorSubcode != 7 {
 		t.Errorf("error during notification decoding(code and subcode are not equal to etalon)")
+		return
 	}
 }
 
@@ -176,10 +197,12 @@ func TestEncodeNotificationMsg(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during notification encoding")
+		return
 	}
 	for cntr := 0; cntr < len(encNotification); cntr++ {
 		if encNotification[cntr] != encodedNotification[cntr] {
 			t.Errorf("byte of encoded msg is not equal to etalon's msg")
+			return
 		}
 	}
 
@@ -202,25 +225,29 @@ func TestEncodeUpdateMsg1(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("cant encode update msg")
+		return
 	}
 	data, err := EncodeUpdateMsg(&bgpRoute)
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("cant encode update msg")
+		return
 	}
 	bgpRoute2, err := DecodeUpdateMsg(data, &BGPCapabilities{})
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("cant decode encoded update")
+		return
 	}
 	data2, _ := EncodeUpdateMsg(&bgpRoute2)
 	if len(data) != len(data2) {
 		t.Errorf("error in encoding/decoding of the same msg")
+		return
 	}
 	for cntr := 0; cntr < len(data); cntr++ {
 		if data[cntr] != data2[cntr] {
 			t.Errorf("error in encoding/decoding of the same msg")
-			break
+			return
 		}
 	}
 }
@@ -234,27 +261,30 @@ func TestEncodeWithdrawUpdateMsg1(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("cant encode withdraw update msg")
+		return
 	}
 	bgpRoute2, err := DecodeUpdateMsg(data, &BGPCapabilities{})
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("cant decode withdraw encoded update")
+		return
 	}
 	data2, _ := EncodeWithdrawUpdateMsg(&bgpRoute2)
 	if len(data) != len(data2) {
 		t.Errorf("error in encoding/decoding of the same withdraw msg")
+		return
 	}
 	for cntr := 0; cntr < len(data); cntr++ {
 		if data[cntr] != data2[cntr] {
 			t.Errorf("error in encoding/decoding of the same withdraw msg")
-			break
+			return
 		}
 	}
 	data3, _ := EncodeUpdateMsg(&bgpRoute)
 	for cntr := 0; cntr < len(data); cntr++ {
 		if data[cntr] != data3[cntr] {
 			t.Errorf("error in encoding/decoding of the same withdraw msg")
-			break
+			return
 		}
 	}
 
@@ -265,6 +295,7 @@ func TestEncodeEndOfRIB(t *testing.T) {
 	if len(eor) != 23 {
 		fmt.Println(eor)
 		t.Errorf("error during EndOfRib marker generation")
+		return
 	}
 }
 
@@ -277,6 +308,7 @@ func TestAddPathEncodingDecoding(t *testing.T) {
 	_, err = DecodeAddPathCapability(encAddPath[2:])
 	if err != nil {
 		t.Errorf("error during add path encoding: %v\n", err)
+		return
 	}
 
 }
@@ -287,10 +319,12 @@ func TestIPv6StringToUint(t *testing.T) {
 	_, err := IPv6StringToAddr("::")
 	if err != nil {
 		t.Errorf("cant convert ipv6 to ipv6addr\n")
+		return
 	}
 	addr, err := IPv6StringToAddr("fc1:2:3::1")
 	if err != nil {
 		t.Errorf("cant convert ipv6 to ipv6addr\n")
+		return
 	}
 	ipv6 := IPv6AddrToString(addr)
 	fmt.Println(ipv6)
@@ -302,30 +336,36 @@ func TestIPv6NLRIEncodingDecoding(t *testing.T) {
 	v6addr, err := IPv6StringToAddr("2a00:bdc0:e003::")
 	if err != nil {
 		t.Errorf("error during ipv6 addr converting: %v\n", err)
+		return
 	}
 	nlri.Prefix = v6addr
 	encIPv6NLRI, err := EncodeIPv6NLRI(nlri)
 	if err != nil {
 		t.Errorf("cant encode ipv6 nlri: %v\n", err)
+		return
 	}
 	fmt.Println(encodedIPv6NLRI)
 	fmt.Println(encIPv6NLRI)
 	if len(encodedIPv6NLRI) != len(encIPv6NLRI) {
 		t.Errorf("len of encoded ipv6 nlri is not equal to len of etalon\n")
+		return
 	}
 	for i := 0; i < len(encIPv6NLRI); i++ {
 		if encIPv6NLRI[i] != encodedIPv6NLRI[i] {
 			t.Errorf("encoded ipv6 nlri is not equal to etalon")
+			return
 		}
 	}
 	decIpv6nlri, err := DecodeIPv6NLRI(encIPv6NLRI)
 	if err != nil {
 		t.Errorf("cant decode encoded nlri: %v\n", err)
+		return
 	}
 	if decIpv6nlri.Length != nlri.Length && decIpv6nlri.Prefix != nlri.Prefix {
 		fmt.Println(decIpv6nlri)
 		fmt.Println(nlri)
 		t.Errorf("decoded nlri not equal to original")
+		return
 	}
 }
 
@@ -338,18 +378,22 @@ func TestIPv6MP_REACH_EncodingDecoding(t *testing.T) {
 	encIPv6MPREACH, err := EncodeIPV6_MP_REACH_NLRI(v6nh, nlri)
 	if err != nil {
 		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
+		return
 	}
 	if len(encodedIPv6MPREACH) != len(encIPv6MPREACH) {
 		t.Errorf("len of encoded ipv6  mp reach nlri is not equal to len of etalon\n")
+		return
 	}
 	for i := 0; i < len(encIPv6MPREACH); i++ {
 		if encIPv6MPREACH[i] != encodedIPv6MPREACH[i] {
 			t.Errorf("encoded ipv6 mp reach nlri is not equal to etalon")
+			return
 		}
 	}
 	mpReachHdr, err := DecodeMP_REACH_NLRI_HDR(encIPv6MPREACH)
 	if err != nil {
 		t.Errorf("cant decode mp_reach_nlri hdr: %v\n", err)
+		return
 	}
 	decIPv6MPREACHnh, decIPv6MPREACHnlri, err := DecodeIPV6_MP_REACH_NLRI(encIPv6MPREACH[FOUR_OCTETS:],
 		mpReachHdr)
@@ -363,6 +407,7 @@ func TestIPv6MP_REACH_EncodingDecoding(t *testing.T) {
 		fmt.Printf("%#v\n", v6nh)
 		fmt.Printf("%#v\n", decIPv6MPREACHnh)
 		t.Errorf("decoded nlri not equal to original\n")
+		return
 	}
 }
 
@@ -373,6 +418,7 @@ func TestIPv6MP_UNREACH_Encoding(t *testing.T) {
 	encIPv6MPUNREACH, err := EncodeIPV6_MP_UNREACH_NLRI(nlri)
 	if err != nil {
 		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
+		return
 	}
 	fmt.Println(encIPv6MPUNREACH)
 }
@@ -387,15 +433,18 @@ func TestIPv6MP_REACH_PathAttrEncoding(t *testing.T) {
 	encIPv6MPREACHPA, err := EncodeV6MPRNLRI(v6nh, nlri, &pa)
 	if err != nil {
 		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
+		return
 	}
 	if len(encodedIPv6MPREACHPA) != len(encIPv6MPREACHPA) {
 		t.Errorf("len of encoded ipv6  mp reach nlri is not equal to len of etalon\n")
+		return
 	}
 	for i := 0; i < len(encIPv6MPREACHPA); i++ {
 		if encIPv6MPREACHPA[i] != encodedIPv6MPREACHPA[i] {
 			fmt.Println(encodedIPv6MPREACHPA)
 			fmt.Println(encIPv6MPREACHPA)
 			t.Errorf("encoded ipv6 mp reach nlri is not equal to etalon")
+			return
 		}
 	}
 }
@@ -408,6 +457,7 @@ func TestIPv6MP_UNREACH_PathAttrEncoding(t *testing.T) {
 	encIPv6MPUNREACHPA, err := EncodeV6MPUNRNLRI(nlri, &pa)
 	if err != nil {
 		t.Errorf("cant encode ipv6 mp unreach nlri: %v\n", err)
+		return
 	}
 	fmt.Println(encIPv6MPUNREACHPA)
 }
@@ -429,13 +479,16 @@ func TestEncodeDecodeUpdateMsgV6(t *testing.T) {
 	msg, err := EncodeUpdateMsg(&bgpRoute)
 	if err != nil {
 		t.Errorf("cant encode update msg with ipv6 mp_reach_nlri attr: %v\n", err)
+		return
 	}
 	bgpRouteDec, err := DecodeUpdateMsg(msg, &BGPCapabilities{})
 	if err != nil {
 		t.Errorf("cant decode encoded v6 route: %v\n", err)
+		return
 	}
 	if len(bgpRouteDec.RoutesV6) != 3 {
 		t.Errorf("error in ipv6 mp_nlri decoding:wrong len\n")
+		return
 	}
 	if bgpRouteDec.RoutesV6[0].Prefix != p1 &&
 		bgpRouteDec.RoutesV6[1].Prefix != p2 &&
@@ -445,6 +498,7 @@ func TestEncodeDecodeUpdateMsgV6(t *testing.T) {
 		fmt.Println(p2)
 		fmt.Println(p3)
 		t.Errorf("error in ipv6 mp_nlri decoding: prefix dont match\n")
+		return
 	}
 }
 
@@ -459,10 +513,12 @@ func TestEncodeDecodeWithdrawUpdateMsgV6(t *testing.T) {
 	msg, err := EncodeUpdateMsg(&bgpRoute)
 	if err != nil {
 		t.Errorf("cant encode update msg with ipv6 mp_reach_nlri attr: %v\n", err)
+		return
 	}
 	bgpRouteDec, err := DecodeUpdateMsg(msg, &BGPCapabilities{})
 	if err != nil {
 		t.Errorf("cant decode encoded v6 route: %v\n", err)
+		return
 	}
 	fmt.Printf("%#v\n", bgpRouteDec)
 }
@@ -475,20 +531,24 @@ func TestIPv4NLRIEncodingDecoding(t *testing.T) {
 	v4addr, err := IPv4ToUint32("10.10.252.0")
 	if err != nil {
 		t.Errorf("error during ipv4 addr converting: %v\n", err)
+		return
 	}
 	nlri.Prefix = v4addr
 	encIPv4NLRI, err := EncodeIPv4NLRI(RouteFlags{}, nlri)
 	if err != nil {
 		t.Errorf("cant encode ipv4 nlri: %v\n", err)
+		return
 	}
 	decIpv4nlri, err := DecodeIPv4NLRI(RouteFlags{}, encIPv4NLRI)
 	if err != nil {
 		t.Errorf("cant decode encoded nlri: %v\n", err)
+		return
 	}
-	if decIpv4nlri.Length != nlri.Length && decIpv4nlri.Prefix != nlri.Prefix {
+	if decIpv4nlri[0].Length != nlri.Length && decIpv4nlri[0].Prefix != nlri.Prefix {
 		fmt.Println(decIpv4nlri)
 		fmt.Println(nlri)
 		t.Errorf("decoded nlri not equal to original")
+		return
 	}
 }
 
@@ -501,10 +561,12 @@ func TestIPv4MP_REACH_EncodingDecoding(t *testing.T) {
 	encIPv4MPREACH, err := EncodeIPV4_MP_REACH_NLRI(v4nh, RouteFlags{}, nlri)
 	if err != nil {
 		t.Errorf("cant encode ipv4 mp reach nlri: %v\n", err)
+		return
 	}
 	mpReachHdr, err := DecodeMP_REACH_NLRI_HDR(encIPv4MPREACH)
 	if err != nil {
 		t.Errorf("cant decode mp_reach_nlri hdr: %v\n", err)
+		return
 	}
 	decIPv4MPREACHnh, decIPv4MPREACHnlri, err := DecodeIPV4_MP_REACH_NLRI(
 		RouteFlags{},
@@ -512,14 +574,21 @@ func TestIPv4MP_REACH_EncodingDecoding(t *testing.T) {
 		mpReachHdr)
 	if err != nil {
 		t.Errorf("cant decode encoded mp_reach_nlri for ipv4: %v\n", err)
+		return
 	}
-	if decIPv4MPREACHnlri.Prefix != nlri.Prefix || decIPv4MPREACHnlri.Length != nlri.Length ||
+	if len(decIPv4MPREACHnlri) != 1 {
+		t.Errorf("error in decoding of mp_reach_nlri for ipv4. nlri's length not equal to 1 in this testcase")
+		return
+	}
+	if decIPv4MPREACHnlri[0].Prefix != nlri.Prefix ||
+		decIPv4MPREACHnlri[0].Length != nlri.Length ||
 		decIPv4MPREACHnh != v4nh {
 		fmt.Printf("%#v\n", nlri)
 		fmt.Printf("%#v\n", decIPv4MPREACHnlri)
 		fmt.Printf("%#v\n", v4nh)
 		fmt.Printf("%#v\n", decIPv4MPREACHnh)
 		t.Errorf("decoded nlri not equal to original\n")
+		return
 	}
 }
 
@@ -530,6 +599,7 @@ func TestIPv4MP_UNREACH_Encoding(t *testing.T) {
 	encIPv4MPUNREACH, err := EncodeIPV4_MP_UNREACH_NLRI(RouteFlags{}, nlri)
 	if err != nil {
 		t.Errorf("cant encode ipv4 mp unreach nlri: %v\n", err)
+		return
 	}
 	fmt.Println(encIPv4MPUNREACH)
 }
@@ -544,6 +614,7 @@ func TestIPv4MP_REACH_PathAttrEncoding(t *testing.T) {
 	_, err := EncodeV4MPRNLRI(v4nh, RouteFlags{}, nlri, &pa)
 	if err != nil {
 		t.Errorf("cant encode ipv4 mp reach nlri: %v\n", err)
+		return
 	}
 }
 
@@ -555,6 +626,7 @@ func TestIPv4MP_UNREACH_PathAttrEncoding(t *testing.T) {
 	encIPv4MPUNREACHPA, err := EncodeV4MPUNRNLRI(RouteFlags{}, nlri, &pa)
 	if err != nil {
 		t.Errorf("cant encode ipv4 mp unreach nlri: %v\n", err)
+		return
 	}
 	fmt.Println(encIPv4MPUNREACHPA)
 }
@@ -571,10 +643,12 @@ func TestIPv4AddPathMP_REACH_EncodingDecoding(t *testing.T) {
 		nlri)
 	if err != nil {
 		t.Errorf("cant encode ipv4 mp reach nlri: %v\n", err)
+		return
 	}
 	mpReachHdr, err := DecodeMP_REACH_NLRI_HDR(encIPv4MPREACH)
 	if err != nil {
 		t.Errorf("cant decode mp_reach_nlri hdr: %v\n", err)
+		return
 	}
 	decIPv4MPREACHnh, decIPv4MPREACHnlri, err := DecodeIPV4_MP_REACH_NLRI(
 		RouteFlags{WithPathId: true},
@@ -582,15 +656,22 @@ func TestIPv4AddPathMP_REACH_EncodingDecoding(t *testing.T) {
 		mpReachHdr)
 	if err != nil {
 		t.Errorf("cant decode encoded mp_reach_nlri for ipv4: %v\n", err)
+		return
 	}
-	if decIPv4MPREACHnlri.Prefix != nlri.Prefix || decIPv4MPREACHnlri.Length != nlri.Length ||
-		decIPv4MPREACHnh != v4nh || decIPv4MPREACHnlri.PathID != nlri.PathID {
+	if len(decIPv4MPREACHnlri) != 1 {
+		t.Errorf("error in decoding of mp_reach_nlri for ipv4. nlri's length not equal to 1 in this testcase")
+		return
+	}
+	if decIPv4MPREACHnlri[0].Prefix != nlri.Prefix ||
+		decIPv4MPREACHnlri[0].Length != nlri.Length ||
+		decIPv4MPREACHnh != v4nh || decIPv4MPREACHnlri[0].PathID != nlri.PathID {
 		fmt.Printf("%#v\n", nlri)
 		fmt.Printf("%#v\n", decIPv4MPREACHnlri)
 		fmt.Printf("%#v\n", v4nh)
 		fmt.Printf("%#v\n", decIPv4MPREACHnh)
-		fmt.Printf("%#v\n", decIPv4MPREACHnlri.PathID)
+		fmt.Printf("%#v\n", decIPv4MPREACHnlri[0].PathID)
 		t.Errorf("decoded nlri not equal to original\n")
+		return
 	}
 	fmt.Printf("%#v\n", decIPv4MPREACHnlri)
 }
@@ -602,6 +683,7 @@ func TestIPv4AddPathMP_UNREACH_Encoding(t *testing.T) {
 	encIPv4MPUNREACH, err := EncodeIPV4_MP_UNREACH_NLRI(RouteFlags{WithPathId: true}, nlri)
 	if err != nil {
 		t.Errorf("cant encode ipv4 w/ path id mp unreach nlri: %v\n", err)
+		return
 	}
 	fmt.Println(encIPv4MPUNREACH)
 }
@@ -618,13 +700,16 @@ func TestIPv4LabeledMP_REACH_EncodingDecoding(t *testing.T) {
 		nlri)
 	if err != nil {
 		t.Errorf("cant encode ipv4 labeled mp reach nlri: %v\n", err)
+		return
 	}
 	mpReachHdr, err := DecodeMP_REACH_NLRI_HDR(encIPv4MPREACH)
 	if err != nil {
 		t.Errorf("cant decode mp_reach_nlri hdr: %v\n", err)
+		return
 	}
 	if mpReachHdr.SAFI != MP_SAFI_LABELED {
 		t.Errorf("error in mp_reach_nlri labeled ipv4 hdr decoding\n")
+		return
 	}
 	decIPv4MPREACHnh, decIPv4MPREACHnlri, err := DecodeIPV4_MP_REACH_NLRI(
 		RouteFlags{Labeled: true},
@@ -632,15 +717,22 @@ func TestIPv4LabeledMP_REACH_EncodingDecoding(t *testing.T) {
 		mpReachHdr)
 	if err != nil {
 		t.Errorf("cant decode encoded mp_reach_nlri for labeled ipv4: %v\n", err)
+		return
 	}
-	if decIPv4MPREACHnlri.Prefix != nlri.Prefix || decIPv4MPREACHnlri.Length != nlri.Length ||
-		decIPv4MPREACHnh != v4nh || decIPv4MPREACHnlri.Label != nlri.Label {
+	if len(decIPv4MPREACHnlri) != 1 {
+		t.Errorf("error in decoding of mp_reach_nlri for ipv4. nlri's length not equal to 1 in this testcase")
+		return
+	}
+	if decIPv4MPREACHnlri[0].Prefix != nlri.Prefix ||
+		decIPv4MPREACHnlri[0].Length != nlri.Length ||
+		decIPv4MPREACHnh != v4nh || decIPv4MPREACHnlri[0].Label != nlri.Label {
 		fmt.Printf("%#v\n", nlri)
 		fmt.Printf("%#v\n", decIPv4MPREACHnlri)
 		fmt.Printf("%#v\n", v4nh)
 		fmt.Printf("%#v\n", decIPv4MPREACHnh)
-		fmt.Printf("%#v\n", decIPv4MPREACHnlri.Label)
+		fmt.Printf("%#v\n", decIPv4MPREACHnlri[0].Label)
 		t.Errorf("decoded nlri not equal to original\n")
+		return
 	}
 	fmt.Printf("%#v\n", decIPv4MPREACHnlri)
 }
@@ -653,17 +745,19 @@ func TestIPv4LabeledMP_UNREACH_Encoding(t *testing.T) {
 		nlri)
 	if err != nil {
 		t.Errorf("cant encode labled ipv4 mp unreach nlri: %v\n", err)
+		return
 	}
 	fmt.Println(encIPv4MPUNREACH)
 }
 
-/* ipv4 labeled unicast  w/ 3 routes and communities generated at  Juniper */
+/* ipv4 labeled unicast  w/ 6 routes and communities generated at  Juniper */
 func TestIPv4LabeledDecodeUpdate(t *testing.T) {
 	encodedUpdate, _ := hex.DecodeString(hexLabeledIPv4_MP_REACH_NLRI)
 	bgpRoute, err := DecodeUpdateMsg(encodedUpdate, &BGPCapabilities{SupportASN4: true})
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during update  msg decoding")
+		return
 	}
 	fmt.Println("###### decoded labeled IPv4 #####")
 	fmt.Printf("%#v\n", bgpRoute)

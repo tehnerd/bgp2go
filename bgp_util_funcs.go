@@ -51,6 +51,13 @@ func CommunityPrettyPrint(community uint32) (uint16, uint16) {
 	return asn, cpart
 }
 
+func PrettyPrintV4NLRI(route IPV4_NLRI, next_hop uint32) {
+	prefix := Uint32IPv4ToString(route.Prefix)
+	nh := Uint32IPv4ToString(next_hop)
+	fmt.Printf("Route: %v/%v label: %v pathid: %v nexthop:%v \n",
+		prefix, route.Length, route.Label, route.PathID, nh)
+}
+
 func PrintBgpUpdate(bgpRoute *BGPRoute) {
 	OriginString := ""
 	switch bgpRoute.ORIGIN {
@@ -64,7 +71,9 @@ func PrintBgpUpdate(bgpRoute *BGPRoute) {
 	fmt.Printf("content of bgp update message is:\n")
 	fmt.Printf("Origin: %v\n", OriginString)
 	fmt.Printf("AS_PATH: %v\n", bgpRoute.AS_PATH)
-	fmt.Printf("NEXT_HOP: %v\n", bgpRoute.NEXT_HOP)
+	if bgpRoute.NEXT_HOP != nil {
+		fmt.Printf("NEXT_HOP: %v\n", bgpRoute.NEXT_HOP)
+	}
 	fmt.Printf("MED: %v\n", bgpRoute.MULTI_EXIT_DISC)
 	fmt.Printf("Local pref: %v\n", bgpRoute.LOCAL_PREF)
 	fmt.Printf("is Atomic Aggregate: %v\n", bgpRoute.ATOMIC_AGGR)
@@ -73,7 +82,7 @@ func PrintBgpUpdate(bgpRoute *BGPRoute) {
 		fmt.Printf("Community: %v:%v\n", asn, cpart)
 	}
 	for _, route := range bgpRoute.Routes {
-		fmt.Printf("Route: %v/%v\n", Uint32IPv4ToString(route.Prefix), route.Length)
+		PrettyPrintV4NLRI(route, bgpRoute.NEXT_HOPv4)
 	}
 
 }
