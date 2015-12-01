@@ -43,6 +43,14 @@ func Uint32IPv4ToString(ipv4 uint32) string {
 	return ipv4addr
 }
 
+func CommunityPrettyPrint(community uint32) (uint16, uint16) {
+	var asn uint16
+	var cpart uint16 //TODO(tehnerd): check rfc for proper naming
+	asn = uint16(community >> 16 & (1<<16 - 1))
+	cpart = uint16(community & (1<<16 - 1))
+	return asn, cpart
+}
+
 func PrintBgpUpdate(bgpRoute *BGPRoute) {
 	OriginString := ""
 	switch bgpRoute.ORIGIN {
@@ -60,6 +68,10 @@ func PrintBgpUpdate(bgpRoute *BGPRoute) {
 	fmt.Printf("MED: %v\n", bgpRoute.MULTI_EXIT_DISC)
 	fmt.Printf("Local pref: %v\n", bgpRoute.LOCAL_PREF)
 	fmt.Printf("is Atomic Aggregate: %v\n", bgpRoute.ATOMIC_AGGR)
+	for _, community := range bgpRoute.Community {
+		asn, cpart := CommunityPrettyPrint(community)
+		fmt.Printf("Community: %v:%v\n", asn, cpart)
+	}
 	for _, route := range bgpRoute.Routes {
 		fmt.Printf("Route: %v/%v\n", Uint32IPv4ToString(route.Prefix), route.Length)
 	}

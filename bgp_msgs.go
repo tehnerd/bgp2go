@@ -338,6 +338,15 @@ func AddAttrToRoute(bgpRoute *BGPRoute, pathAttr *PathAttr) error {
 		bgpRoute.ATOMIC_AGGR = true
 	case BA_NEXT_HOP:
 		bgpRoute.NEXT_HOP = append(bgpRoute.NEXT_HOP, pathAttr.Data...)
+	case BA_COMMUNITY:
+		var community uint32
+		for reader.Len() >= 4 {
+			err = binary.Read(reader, binary.BigEndian, &community)
+			if err != nil {
+				return fmt.Errorf("cant decode COMMUNITY Attr: %v\n", err)
+			}
+			bgpRoute.Community = append(bgpRoute.Community, community)
+		}
 	case BA_AS_PATH:
 		//TODO: as_path can has more than one path segment
 		if pathAttr.AttrLength != 0 {

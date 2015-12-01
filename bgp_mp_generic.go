@@ -25,7 +25,7 @@ type MP_REACH_NLRI_HDR struct {
 	NHLength uint8
 	//NEXT_HOP variable length
 	/*
-		 we also has reserved byte, but we dont
+		 we also have reserved byte, but we dont
 		add it to this struct coz it will be harder for
 		us to decode it (we have nh of variable length between
 		afi/safi/nhlen and reserved)
