@@ -56,7 +56,7 @@ func DecodeIPv4NLRI(flags RouteFlags, data []byte) ([]IPV4_NLRI, error) {
 	var pathID uint32
 	if len(data) < ONE_OCTET {
 		//this is EOR Marker
-		return nlri, nil
+		return nlris, nil
 	}
 	if flags.WithPathId {
 		err := binary.Read(bytes.NewReader(data), binary.BigEndian, &pathID)
