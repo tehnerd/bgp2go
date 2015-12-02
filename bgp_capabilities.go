@@ -136,8 +136,8 @@ func DecodeASN4Capabiltiy(encAsn4 []byte) (uint32, error) {
 }
 
 /*
-	TODO: right now i've implemented only capability anounce; no actual encoding for nlri w/ add path
-	has been implemented yet
+	TODO: right now i've implemented only capability anounce;
+	no actual encoding for nlri w/ add path has been implemented yet
 */
 func EncodeAddPathCapability(addPaths []AddPathCapability) ([]byte, error) {
 	buf := new(bytes.Buffer)

@@ -147,6 +147,11 @@ type IPV4_NLRI struct {
 type RouteFlags struct {
 	Labeled    bool
 	WithPathId bool
+	/*
+		flag that this route would be sent to ebgp peer.
+		we will remove local_pref and add ourself's asn according to this flag
+	*/
+	EBGP bool
 }
 
 type BGPRoute struct {
