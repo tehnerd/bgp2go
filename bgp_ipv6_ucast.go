@@ -24,6 +24,8 @@ type IPV6_NLRI struct {
 	Prefix IPv6Addr
 }
 
+//TODO(tehnerd): labeled ipv6 and add path for ipv6
+
 //NH_LEN of 16 is hardcoded rightnow; TODO: support for linklocal
 func EncodeIPv6NLRI(nlris []IPV6_NLRI) ([]byte, error) {
 	buf := new(bytes.Buffer)
@@ -49,8 +51,7 @@ func EncodeIPv6NLRI(nlris []IPV6_NLRI) ([]byte, error) {
 func DecodeIPv6NLRI(data []byte) ([]IPV6_NLRI, error) {
 	nlris := make([]IPV6_NLRI, 0)
 	if len(data) < ONE_OCTET {
-		//This is EOR Marker
-		return nlris, nil
+		return nlris, EndOfRib{}
 	}
 	for len(data) > 0 {
 		ipv6nlri := IPV6_NLRI{}
@@ -105,7 +106,7 @@ func DecodeIPV6_MP_REACH_NLRI(data []byte, mpHdr MP_REACH_NLRI_HDR) (IPv6Addr,
 	var nh IPv6Addr
 	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &nh)
 	if err != nil {
-		return nh, nil, fmt.Errorf("cant decode ipv6 nlri's nh: %v\n", err)
+		return nh, nil, err
 	}
 	/*
 		TODO: check if len != IPV_ADDRESS_LEN (means that we have encoded link local

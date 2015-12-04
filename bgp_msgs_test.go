@@ -18,6 +18,8 @@ const (
 	hexIPv6_MP_REACH             = "00020110200107f800200101000000000245018000302a00bdc0e003"
 	hexIPv6_MP_REACH_NLRI_PA     = "900e001c00020110200107f800200101000000000245018000302a00bdc0e003"
 	hexLabeledIPv4_MP_REACH_NLRI = "ffffffffffffffffffffffffffffffff007702000000604001010040020602010000ff7880040400000001c0080cff780001ff780002ff780064900e0039000104040a004e070038494701c0a8010638494401c0a8010338494501c0a8010438494601c0a8010538494301c0a8010238494201c0a80101"
+	hexJuniperOpen               = "ffffffffffffffffffffffffffffffff003b0104ff79005ac0a801081e02060104000100040202800002020200020440020078020641040000ff79"
+	hexEndOfRibv4                = "ffffffffffffffffffffffffffffffff001e0200000007900f0003000104"
 )
 
 func TestDecodeMsgHeader(t *testing.T) {
@@ -55,6 +57,17 @@ func TestEncodeMsgHeader(t *testing.T) {
 
 func TestDecodeOpenMsg(t *testing.T) {
 	encodedOpen, _ := hex.DecodeString(hexOpenMsg)
+	openMsg, err := DecodeOpenMsg(encodedOpen[19:])
+	if err != nil {
+		fmt.Println(err)
+		t.Errorf("error during open msg decoding: %v\n", err)
+		return
+	}
+	fmt.Printf("%#v\n", openMsg)
+}
+
+func TestDecodeJuniperOpenMsg(t *testing.T) {
+	encodedOpen, _ := hex.DecodeString(hexJuniperOpen)
 	openMsg, err := DecodeOpenMsg(encodedOpen[19:])
 	if err != nil {
 		fmt.Println(err)
@@ -296,6 +309,19 @@ func TestEncodeEndOfRIB(t *testing.T) {
 		fmt.Println(eor)
 		t.Errorf("error during EndOfRib marker generation")
 		return
+	}
+}
+
+func TestDecodeEndOfRIB(t *testing.T) {
+	encodedUpdateEOR, _ := hex.DecodeString(hexEndOfRibv4)
+	_, err := DecodeUpdateMsg(encodedUpdateEOR, &BGPCapabilities{SupportASN4: true})
+	if err != nil {
+		switch err.(type) {
+		case EndOfRib:
+		default:
+			t.Errorf("error during update  msg decoding: %v\n", err)
+			return
+		}
 	}
 }
 

@@ -112,6 +112,14 @@ func DecodeMP_UNREACH_NLRI(data []byte, bgpRoute *BGPRoute) error {
 			}
 			bgpRoute.WithdrawRoutes = append(bgpRoute.WithdrawRoutes,
 				nlris...)
+		case MP_SAFI_LABELED:
+			nlris, err := DecodeIPv4NLRI(bgpRoute.Flags, data)
+			if err != nil {
+				return err
+			}
+			bgpRoute.WithdrawRoutes = append(bgpRoute.WithdrawRoutes,
+				nlris...)
+
 		}
 	case MP_AFI_IPV6:
 		switch hdr.SAFI {
@@ -122,6 +130,14 @@ func DecodeMP_UNREACH_NLRI(data []byte, bgpRoute *BGPRoute) error {
 			}
 			bgpRoute.WithdrawRoutesV6 = append(bgpRoute.WithdrawRoutesV6,
 				nlris...)
+		case MP_SAFI_LABELED:
+			nlris, err := DecodeIPv6NLRI(data)
+			if err != nil {
+				return err
+			}
+			bgpRoute.WithdrawRoutesV6 = append(bgpRoute.WithdrawRoutesV6,
+				nlris...)
+
 		}
 	}
 	return nil

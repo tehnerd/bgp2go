@@ -55,8 +55,7 @@ func DecodeIPv4NLRI(flags RouteFlags, data []byte) ([]IPV4_NLRI, error) {
 	nlris := make([]IPV4_NLRI, 0)
 	var pathID uint32
 	if len(data) < ONE_OCTET {
-		//this is EOR Marker
-		return nlris, nil
+		return nlris, EndOfRib{}
 	}
 	if flags.WithPathId {
 		err := binary.Read(bytes.NewReader(data), binary.BigEndian, &pathID)
@@ -186,7 +185,7 @@ func DecodeIPV4_MP_REACH_NLRI(flags RouteFlags,
 	var nh uint32
 	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &nh)
 	if err != nil {
-		return nh, nil, fmt.Errorf("cant decode ipv4 nlri's nh: %v\n", err)
+		return nh, nil, err
 	}
 	/*
 		one_octet -> reserved field

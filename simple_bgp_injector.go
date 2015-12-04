@@ -986,12 +986,14 @@ RECONNECT:
 							BGP_FSM_ERROR, BGP_GENERIC_ERROR)
 						msgBuf = msgBuf[:0]
 						if passive {
-							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+							context.ToMainContext <- BGPCommand{
+								From: context.NeighbourAddr,
 								Cmnd: "PassiveClossed"}
 							goto PASSIVE_TEARDOWN
 
 						} else {
-							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
+							context.ToMainContext <- BGPCommand{
+								From: context.NeighbourAddr,
 								Cmnd: "ActiveClossed"}
 							goto RECONNECT
 						}
@@ -999,17 +1001,24 @@ RECONNECT:
 				case BGP_UPDATE_MSG:
 					updMsg, err := DecodeUpdateMsg(msgBuf[:hdr.Length], &bgpCaps)
 					if err != nil {
-						SendNotification(context, "UpdateError", localSockChans,
-							BGP_UPDATE_MSG_ERROR, BGP_GENERIC_ERROR)
-						msgBuf = msgBuf[:0]
-						if passive {
-							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
-								Cmnd: "PassiveClossed"}
-							goto PASSIVE_TEARDOWN
-						} else {
-							context.ToMainContext <- BGPCommand{From: context.NeighbourAddr,
-								Cmnd: "ActiveClossed"}
-							goto RECONNECT
+						switch err.(type) {
+						case EndOfRib:
+						default:
+							SendNotification(context, "UpdateError",
+								localSockChans,
+								BGP_UPDATE_MSG_ERROR, BGP_GENERIC_ERROR)
+							msgBuf = msgBuf[:0]
+							if passive {
+								context.ToMainContext <- BGPCommand{
+									From: context.NeighbourAddr,
+									Cmnd: "PassiveClossed"}
+								goto PASSIVE_TEARDOWN
+							} else {
+								context.ToMainContext <- BGPCommand{
+									From: context.NeighbourAddr,
+									Cmnd: "ActiveClossed"}
+								goto RECONNECT
+							}
 						}
 					}
 					state := context.fsm.Event("Update")
@@ -1027,6 +1036,7 @@ RECONNECT:
 							goto RECONNECT
 						}
 					}
+					//XXX(tehnerd): this is for debuging only. could be safely removed
 					PrintBgpUpdate(&updMsg)
 				case BGP_NOTIFICATION_MSG:
 					goto CLOSE_CONNECTION

@@ -437,7 +437,13 @@ func DecodeUpdateMsg(msg []byte, caps *BGPCapabilities) (BGPRoute, error) {
 		}
 		err := AddAttrToRoute(&bgpRoute, &pathAttr)
 		if err != nil {
-			return bgpRoute, fmt.Errorf("cant decode update msg attribute data: %v\n", err)
+			switch err.(type) {
+			case EndOfRib:
+				return bgpRoute, err
+			default:
+				return bgpRoute,
+					fmt.Errorf("cant decode update msg attribute data: %v\n", err)
+			}
 		}
 		//Size of path's attr heaer either 3 of 4 octets
 		if pathAttr.ExtendedLength {
@@ -636,6 +642,10 @@ func GenerateKeepalive() []byte {
 	return kaMsg
 }
 
+/*
+	not sure if it's correct. prob should be inside mp_unreach_nlri.
+	gona read rfc ...
+*/
 func GenerateEndOfRIB() []byte {
 	encodedUpdate := make([]byte, 0)
 	buf := new(bytes.Buffer)

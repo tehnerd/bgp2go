@@ -177,3 +177,12 @@ func DecodeAddPathCapability(capability []byte) ([]AddPathCapability, error) {
 
 	return addPathList, nil
 }
+
+/* Error to handle EOR Marker */
+type EndOfRib struct {
+	eor bool
+}
+
+func (eor EndOfRib) Error() string {
+	return "EOR"
+}
