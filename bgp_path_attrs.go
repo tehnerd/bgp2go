@@ -142,22 +142,20 @@ func EncodeBGPRouteAttrs(bgpRoute *BGPRoute) ([]byte, error) {
 
 	}
 	if len(bgpRoute.RoutesV6) != 0 {
-		for _, route := range bgpRoute.RoutesV6 {
-			data, err = EncodeV6MPRNLRI(bgpRoute.NEXT_HOPv6, route, &pathAttr)
-			if err != nil {
-				return nil, err
-			}
-			encodedAttrs = append(encodedAttrs, data...)
+		data, err = EncodeV6MPRNLRI(bgpRoute.NEXT_HOPv6,
+			bgpRoute.RoutesV6, &pathAttr)
+		if err != nil {
+			return nil, err
 		}
+		encodedAttrs = append(encodedAttrs, data...)
 	}
 	if len(bgpRoute.WithdrawRoutesV6) != 0 {
-		for _, route := range bgpRoute.WithdrawRoutesV6 {
-			data, err = EncodeV6MPUNRNLRI(route, &pathAttr)
-			if err != nil {
-				return nil, err
-			}
-			encodedAttrs = append(encodedAttrs, data...)
+		data, err = EncodeV6MPUNRNLRI(bgpRoute.WithdrawRoutesV6,
+			&pathAttr)
+		if err != nil {
+			return nil, err
 		}
+		encodedAttrs = append(encodedAttrs, data...)
 	}
 	if bgpRoute.MPINET {
 		if len(bgpRoute.Routes) != 0 {
@@ -290,10 +288,10 @@ func EncodeNextHopAttr(nh []byte, pathAttr *PathAttr) ([]byte, error) {
 	return encodedAttr, nil
 }
 
-func EncodeV6MPRNLRI(nh IPv6Addr, nlri IPV6_NLRI, pathAttr *PathAttr) ([]byte, error) {
+func EncodeV6MPRNLRI(nh IPv6Addr, nlris []IPV6_NLRI, pathAttr *PathAttr) ([]byte, error) {
 	pathAttr.AttrFlags = BAF_OPTIONAL
 	pathAttr.AttrTypeCode = BA_MP_REACH_NLRI
-	encData, err := EncodeIPV6_MP_REACH_NLRI(nh, nlri)
+	encData, err := EncodeIPV6_MP_REACH_NLRI(nh, nlris)
 	if err != nil {
 		return nil, fmt.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
 	}
@@ -323,10 +321,10 @@ func EncodeV4MPRNLRI(nh uint32, flags RouteFlags, nlris []IPV4_NLRI,
 	return encodedAttr, nil
 }
 
-func EncodeV6MPUNRNLRI(nlri IPV6_NLRI, pathAttr *PathAttr) ([]byte, error) {
+func EncodeV6MPUNRNLRI(nlris []IPV6_NLRI, pathAttr *PathAttr) ([]byte, error) {
 	pathAttr.AttrFlags = BAF_OPTIONAL
 	pathAttr.AttrTypeCode = BA_MP_UNREACH_NLRI
-	encData, err := EncodeIPV6_MP_UNREACH_NLRI(nlri)
+	encData, err := EncodeIPV6_MP_UNREACH_NLRI(nlris)
 	if err != nil {
 		return nil, fmt.Errorf("cant encode ipv6 mp unreach nlri: %v\n", err)
 	}

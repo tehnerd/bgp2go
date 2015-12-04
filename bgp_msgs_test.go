@@ -339,7 +339,7 @@ func TestIPv6NLRIEncodingDecoding(t *testing.T) {
 		return
 	}
 	nlri.Prefix = v6addr
-	encIPv6NLRI, err := EncodeIPv6NLRI(nlri)
+	encIPv6NLRI, err := EncodeIPv6NLRI([]IPV6_NLRI{nlri})
 	if err != nil {
 		t.Errorf("cant encode ipv6 nlri: %v\n", err)
 		return
@@ -361,7 +361,7 @@ func TestIPv6NLRIEncodingDecoding(t *testing.T) {
 		t.Errorf("cant decode encoded nlri: %v\n", err)
 		return
 	}
-	if decIpv6nlri.Length != nlri.Length && decIpv6nlri.Prefix != nlri.Prefix {
+	if decIpv6nlri[0].Length != nlri.Length && decIpv6nlri[0].Prefix != nlri.Prefix {
 		fmt.Println(decIpv6nlri)
 		fmt.Println(nlri)
 		t.Errorf("decoded nlri not equal to original")
@@ -375,7 +375,7 @@ func TestIPv6MP_REACH_EncodingDecoding(t *testing.T) {
 	v6addr, _ := IPv6StringToAddr("2a00:bdc0:e003::")
 	v6nh, _ := IPv6StringToAddr("2001:7f8:20:101::245:180")
 	nlri.Prefix = v6addr
-	encIPv6MPREACH, err := EncodeIPV6_MP_REACH_NLRI(v6nh, nlri)
+	encIPv6MPREACH, err := EncodeIPV6_MP_REACH_NLRI(v6nh, []IPV6_NLRI{nlri})
 	if err != nil {
 		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
 		return
@@ -400,7 +400,8 @@ func TestIPv6MP_REACH_EncodingDecoding(t *testing.T) {
 	if err != nil {
 		t.Errorf("cant decode encoded mp_reach_nlri for ipv6: %v\n", err)
 	}
-	if decIPv6MPREACHnlri.Prefix != nlri.Prefix || decIPv6MPREACHnlri.Length != nlri.Length ||
+	if decIPv6MPREACHnlri[0].Prefix != nlri.Prefix ||
+		decIPv6MPREACHnlri[0].Length != nlri.Length ||
 		decIPv6MPREACHnh != v6nh {
 		fmt.Printf("%#v\n", nlri)
 		fmt.Printf("%#v\n", decIPv6MPREACHnlri)
@@ -415,7 +416,7 @@ func TestIPv6MP_UNREACH_Encoding(t *testing.T) {
 	nlri := IPV6_NLRI{Length: 48}
 	v6addr, _ := IPv6StringToAddr("2a00:bdc0:e003::")
 	nlri.Prefix = v6addr
-	encIPv6MPUNREACH, err := EncodeIPV6_MP_UNREACH_NLRI(nlri)
+	encIPv6MPUNREACH, err := EncodeIPV6_MP_UNREACH_NLRI([]IPV6_NLRI{nlri})
 	if err != nil {
 		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
 		return
@@ -430,7 +431,7 @@ func TestIPv6MP_REACH_PathAttrEncoding(t *testing.T) {
 	v6nh, _ := IPv6StringToAddr("2001:7f8:20:101::245:180")
 	nlri.Prefix = v6addr
 	pa := PathAttr{}
-	encIPv6MPREACHPA, err := EncodeV6MPRNLRI(v6nh, nlri, &pa)
+	encIPv6MPREACHPA, err := EncodeV6MPRNLRI(v6nh, []IPV6_NLRI{nlri}, &pa)
 	if err != nil {
 		t.Errorf("cant encode ipv6 mp reach nlri: %v\n", err)
 		return
@@ -454,7 +455,7 @@ func TestIPv6MP_UNREACH_PathAttrEncoding(t *testing.T) {
 	v6addr, _ := IPv6StringToAddr("2a00:bdc0:e003::")
 	nlri.Prefix = v6addr
 	pa := PathAttr{}
-	encIPv6MPUNREACHPA, err := EncodeV6MPUNRNLRI(nlri, &pa)
+	encIPv6MPUNREACHPA, err := EncodeV6MPUNRNLRI([]IPV6_NLRI{nlri}, &pa)
 	if err != nil {
 		t.Errorf("cant encode ipv6 mp unreach nlri: %v\n", err)
 		return
