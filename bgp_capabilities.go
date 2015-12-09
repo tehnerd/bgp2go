@@ -13,9 +13,16 @@ import (
 const (
 	CAPABILITIES_OPTIONAL_PARAM = 2
 	CAPABILITY_MP_EXTENSION     = 1
+	CAPABILITY_GRACEFUL_RESTART = 64
 	CAPABILITY_AS4_NUMBER       = 65
 	CAPABILITY_ADD_PATH         = 69
 	MAX_UINT8                   = 255
+)
+
+const (
+	GR_TIME_FIELD_SIZE       = 12
+	GR_RESTART_FLAG_OFFSET   = 15
+	GR_FORWARDING_BIT_OFFSET = 7
 )
 
 type Capability struct {
@@ -32,6 +39,7 @@ type BGPCapabilities struct {
 	SupportASN4 bool
 	ASN4        uint32
 	AddPath     uint8
+	SupportGR   bool
 }
 
 //Multiprotocol Extension
@@ -47,6 +55,51 @@ type AddPathCapability struct {
 	SAFI uint16
 	/* Send/Recv/both */
 	Flags uint8
+}
+
+//Graceful Restart
+type GRCapability struct {
+	FlagsAndTime uint16
+	/*
+			Commented because according to RFC:
+			"When a sender of this capability does not include any <AFI, SAFI> in
+		   the capability, it means that the sender is not capable of preserving
+		   its forwarding state during BGP restart, but supports procedures for
+		   the Receiving Speaker (as defined in Section 4.2 of this document).
+		   In that case, the value of the "Restart Time" field advertised by the
+		   sender is irrelevant."
+			So far no plans to support SSO.
+			SupportedAF  []PerAFISAFIGR
+	*/
+}
+
+type PerAFISAFIGR struct {
+	AFI  uint16
+	SAFI uint8
+	//Forwarding bit and <7 reserved bit>
+	Flags uint8
+}
+
+func (grc *GRCapability) GetFlags() uint8 {
+	return uint8(grc.FlagsAndTime >> GR_TIME_FIELD_SIZE)
+}
+
+func (grc *GRCapability) SetFlags(restart bool) {
+	if restart {
+		grc.FlagsAndTime |= (1 << GR_RESTART_FLAG_OFFSET)
+	} else {
+		grc.FlagsAndTime &= ((1 << GR_RESTART_FLAG_OFFSET) - 1)
+	}
+}
+
+func (grc *GRCapability) GetTime() uint16 {
+	return grc.FlagsAndTime & ((1 << GR_TIME_FIELD_SIZE) - 1)
+}
+
+func (grc *GRCapability) SetTime(time uint16) {
+	flags := grc.GetFlags()
+	grc.FlagsAndTime = (time & ((1 << GR_TIME_FIELD_SIZE) - 1))
+	grc.FlagsAndTime |= (uint16(flags) << GR_TIME_FIELD_SIZE)
 }
 
 func isMPCapabilityEqual(cap1, cap2 MPCapability) bool {
@@ -185,4 +238,30 @@ type EndOfRib struct {
 
 func (eor EndOfRib) Error() string {
 	return "EOR"
+}
+
+/* Graceful Restart Capability rfc 4274 */
+func DecodeGRCapability(data []byte) (GRCapability, error) {
+	var grCap GRCapability
+	/* right now we only care about flags and time for GR */
+	err := binary.Read(bytes.NewReader(data[:TWO_OCTETS]),
+		binary.BigEndian, &grCap)
+	if err != nil {
+		return grCap, fmt.Errorf("cant decode gr capability: %v\n", err)
+	}
+	return grCap, nil
+}
+
+func EncodeGRCapability(asn4 uint32) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.BigEndian, &asn4)
+	if err != nil {
+		return nil, fmt.Errorf("cant encode asn4: %v\n", err)
+	}
+	capability, err := EncodeCapability(Capability{Code: CAPABILITY_AS4_NUMBER, Length: FOUR_OCTETS},
+		buf.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("cant encode asn4 capabiltiy: %v\n", err)
+	}
+	return capability, nil
 }

@@ -999,7 +999,8 @@ RECONNECT:
 						}
 					}
 				case BGP_UPDATE_MSG:
-					updMsg, err := DecodeUpdateMsg(msgBuf[:hdr.Length], &bgpCaps)
+					/* right now we dont care about rcved msg */
+					_, err := DecodeUpdateMsg(msgBuf[:hdr.Length], &bgpCaps)
 					if err != nil {
 						switch err.(type) {
 						case EndOfRib:
@@ -1036,8 +1037,6 @@ RECONNECT:
 							goto RECONNECT
 						}
 					}
-					//XXX(tehnerd): this is for debuging only. could be safely removed
-					PrintBgpUpdate(&updMsg)
 				case BGP_NOTIFICATION_MSG:
 					goto CLOSE_CONNECTION
 				case BGP_KEEPALIVE_MSG:

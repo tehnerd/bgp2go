@@ -237,6 +237,12 @@ func DecodeOpenMsg(msg []byte) (OpenMsg, error) {
 						}
 						openMsg.Caps.SupportASN4 = true
 						openMsg.Caps.ASN4 = asn4
+					case CAPABILITY_GRACEFUL_RESTART:
+						_, err := DecodeGRCapability(capability)
+						if err != nil {
+							return openMsg, fmt.Errorf("%v\n", err)
+						}
+						openMsg.Caps.SupportGR = true
 					}
 				}
 			}
@@ -277,6 +283,19 @@ func EncodeOpenMsg(openMsg *OpenMsg) ([]byte, error) {
 		encodedOptParams = append(encodedOptParams, encParamHdr...)
 		encodedOptParams = append(encodedOptParams, encCap...)
 	}
+	if openMsg.Caps.SupportGR {
+		encCap, err := EncodeASN4Capability(openMsg.Caps.ASN4)
+		if err != nil {
+			return nil, fmt.Errorf("cant encode asn4 cap: %v\n", err)
+		}
+		encParamHdr, err := EncodeOptionalParamHeader(OptionalParamHeader{
+			ParamType:   CAPABILITIES_OPTIONAL_PARAM,
+			ParamLength: uint8(len(encCap)),
+		})
+		encodedOptParams = append(encodedOptParams, encParamHdr...)
+		encodedOptParams = append(encodedOptParams, encCap...)
+	}
+
 	openMsg.Hdr.OptParamLength = uint8(len(encodedOptParams))
 	err := binary.Write(buf, binary.BigEndian, openMsg.Hdr)
 	if err != nil {
