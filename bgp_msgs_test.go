@@ -41,7 +41,7 @@ func TestEncodeMsgHeader(t *testing.T) {
 		t.Errorf("error during bgp msg header encoding")
 		return
 	}
-	if len(encMsgHdr) != 19 {
+	if len(encMsgHdr) != MSG_HDR_SIZE {
 		fmt.Println(len(encMsgHdr))
 		fmt.Println(encMsgHdr)
 		t.Errorf("error in len of encoded hdr")
@@ -57,7 +57,7 @@ func TestEncodeMsgHeader(t *testing.T) {
 
 func TestDecodeOpenMsg(t *testing.T) {
 	encodedOpen, _ := hex.DecodeString(hexOpenMsg)
-	openMsg, err := DecodeOpenMsg(encodedOpen[19:])
+	openMsg, err := DecodeOpenMsg(encodedOpen[MSG_HDR_SIZE:])
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during open msg decoding: %v\n", err)
@@ -68,7 +68,7 @@ func TestDecodeOpenMsg(t *testing.T) {
 
 func TestDecodeJuniperOpenMsg(t *testing.T) {
 	encodedOpen, _ := hex.DecodeString(hexJuniperOpen)
-	openMsg, err := DecodeOpenMsg(encodedOpen[19:])
+	openMsg, err := DecodeOpenMsg(encodedOpen[MSG_HDR_SIZE:])
 	if err != nil {
 		fmt.Println(err)
 		t.Errorf("error during open msg decoding: %v\n", err)
@@ -140,11 +140,41 @@ func TestEncodeOpenMsg(t *testing.T) {
 	}
 	//HACKISH TEST; we dont know how to encode all of the opt params and caps in etalon msg
 	//so here we only tests how we have encoded ans,holdtime etc
-	for cntr := 19; cntr < MIN_OPEN_MSG_SIZE-2; cntr++ {
+	for cntr := MSG_HDR_SIZE; cntr < MIN_OPEN_MSG_SIZE-2; cntr++ {
 		if encOpenMsg[cntr] != encodedOpen[cntr] {
 			t.Errorf("byte of encoded msg is not equal to etalon's msg")
 			return
 		}
+	}
+}
+
+func TestDecodeEncodeGR(t *testing.T) {
+	encodedOpen, _ := hex.DecodeString(hexOpenMsg)
+	openMsg, err := DecodeOpenMsg(encodedOpen[MSG_HDR_SIZE:])
+	if err != nil {
+		fmt.Println(err)
+		t.Errorf("error during open msg decoding: %v\n", err)
+		return
+	}
+	if openMsg.Caps.SupportGR != true {
+		t.Errorf("this open msg suppose to have GR enabled\n")
+		return
+	}
+	reEncodedOpen, err := EncodeOpenMsg(&openMsg)
+	if err != nil {
+		fmt.Println(err)
+		t.Errorf("error during open msg w/GR encoding: %v\n", err)
+		return
+	}
+	fmt.Println(reEncodedOpen)
+	newOpenMsg, err := DecodeOpenMsg(reEncodedOpen[MSG_HDR_SIZE:])
+	if err != nil {
+		t.Errorf("error during open msg w/GR decoding: %v\n", err)
+		return
+	}
+	if newOpenMsg.Caps.SupportGR != true {
+		t.Errorf("error durign GR cap encoding/decoding\n")
+		return
 	}
 }
 

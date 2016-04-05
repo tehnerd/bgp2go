@@ -171,7 +171,7 @@ func EncodeASN4Capability(asn4 uint32) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cant encode asn4: %v\n", err)
 	}
-	capability, err := EncodeCapability(Capability{Code: CAPABILITY_AS4_NUMBER, Length: FOUR_OCTETS},
+	capability, err := EncodeCapability(Capability{Code: CAPABILITY_AS4_NUMBER},
 		buf.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("cant encode asn4 capabiltiy: %v\n", err)
@@ -203,8 +203,7 @@ func EncodeAddPathCapability(addPaths []AddPathCapability) ([]byte, error) {
 		encodedAddPaths = append(encodedAddPaths, buf.Bytes()...)
 	}
 	//TODO: check that len of encodedAddPaths is less than 255
-	capability, err := EncodeCapability(Capability{Code: CAPABILITY_ADD_PATH,
-		Length: uint8(len(encodedAddPaths))},
+	capability, err := EncodeCapability(Capability{Code: CAPABILITY_ADD_PATH},
 		encodedAddPaths)
 	if err != nil {
 		return nil, fmt.Errorf("cant encode AddPath capabiltiy: %v\n", err)
@@ -252,13 +251,17 @@ func DecodeGRCapability(data []byte) (GRCapability, error) {
 	return grCap, nil
 }
 
-func EncodeGRCapability(asn4 uint32) ([]byte, error) {
+func EncodeGRCapability(cap GRCapability) ([]byte, error) {
 	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.BigEndian, &asn4)
+	err := binary.Write(buf, binary.BigEndian, &cap)
 	if err != nil {
-		return nil, fmt.Errorf("cant encode asn4: %v\n", err)
+		return nil, fmt.Errorf("cant encode gr capability: %v\n", err)
 	}
-	capability, err := EncodeCapability(Capability{Code: CAPABILITY_AS4_NUMBER, Length: FOUR_OCTETS},
+	/* we dont support per afi/safi gr; hence gr contains only flags and
+	len is 2 octest
+	*/
+	capability, err := EncodeCapability(Capability{
+		Code: CAPABILITY_GRACEFUL_RESTART},
 		buf.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("cant encode asn4 capabiltiy: %v\n", err)

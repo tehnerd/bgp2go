@@ -284,9 +284,10 @@ func EncodeOpenMsg(openMsg *OpenMsg) ([]byte, error) {
 		encodedOptParams = append(encodedOptParams, encCap...)
 	}
 	if openMsg.Caps.SupportGR {
-		encCap, err := EncodeASN4Capability(openMsg.Caps.ASN4)
+		var cap GRCapability
+		encCap, err := EncodeGRCapability(cap)
 		if err != nil {
-			return nil, fmt.Errorf("cant encode asn4 cap: %v\n", err)
+			return nil, fmt.Errorf("cant encode GR cap: %v\n", err)
 		}
 		encParamHdr, err := EncodeOptionalParamHeader(OptionalParamHeader{
 			ParamType:   CAPABILITIES_OPTIONAL_PARAM,
@@ -323,7 +324,7 @@ func DecodeOptionalParamHeader(msg []byte) (OptionalParamHeader, []byte, error) 
 		return optParamHdr, nil, fmt.Errorf("cant decode optional param header: %v\n", err)
 	}
 	if len(msg) < (TWO_OCTETS + int(optParamHdr.ParamLength)) {
-		return optParamHdr, nil, fmt.Errorf("opt param len is not enough for decoding\n")
+		return optParamHdr, nil, fmt.Errorf("opt param+msg len is not enough for decoding\n")
 	}
 	return optParamHdr, msg[TWO_OCTETS : TWO_OCTETS+optParamHdr.ParamLength], nil
 
